@@ -19,49 +19,51 @@ The **Coupon Mention Tracker** monitors coupon code mentions in Google AI Overvi
 
 ## Architecture & Logic
 
-The system reads from the existing Marketing Hub AI Overviews database, scans response text for configured coupon codes, and generates reports.
+The system reads from the existing Marketing Hub AI Overviews database, fetches active coupon codes from Google Sheets, scans response text for matches, and generates reports.
 
 ### Data Flow Diagram
 
 ```mermaid
 flowchart TD
-    S1["1 Fetch AI Overview<br>Results from DB"]
-    S2["2 Scan Response Text<br>for Coupon Patterns"]
-    S3["3 Match Against<br>Active Coupon List"]
-    S4["4 Generate Weekly<br>Report Data"]
-    S5["5 Send Slack<br>Notification"]
-    S6["6 Store Results<br>for Looker"]
+    S1["Fetch AI Overview<br>Results from DB"]
+    S2["Fetch Active Coupons<br>from Google Sheets"]
+    S3["Scan Response Text<br>for Coupon Patterns"]
+    S4["Match Against<br>Active Coupon List"]
+    S5["Generate Weekly<br>Report Data"]
+    S6["Send Slack<br>Notification"]
+    S7["Store Results<br>for Looker"]
 
-    S1 --> S2
-    S2 --> S3
+    S1 --> S3
+    S2 --> S4
     S3 --> S4
     S4 --> S5
-    S4 --> S6
+    S5 --> S6
+    S5 --> S7
 
     classDef prepStyle fill:#7E7AE6,stroke:#3D3270,stroke-width:2px,color:#FFFFFF
     classDef analysisStyle fill:#3A5CED,stroke:#18407F,stroke-width:2px,color:#FFFFFF
     classDef decisionStyle fill:#85A2FF,stroke:#18407F,stroke-width:2px,color:#FFFFFF
-    classDef validationStyle fill:#82E5E8,stroke:#1C8BA5,stroke-width:2px,color:#FFFFFF
     classDef documentationStyle fill:#C2A9FF,stroke:#3D3270,stroke-width:2px,color:#FFFFFF
 
-    class S1 prepStyle
-    class S2,S3 analysisStyle
-    class S4 decisionStyle
-    class S5,S6 documentationStyle
+    class S1,S2 prepStyle
+    class S3,S4 analysisStyle
+    class S5 decisionStyle
+    class S6,S7 documentationStyle
 ```
 
 ### Logical Flow
 
 1. **Fetch Results**: Query `ai_overviews_results` joined with `ai_overviews_prompts` for the reporting period
-2. **Scan Text**: Use regex patterns to find coupon codes in `response_text`
-3. **Validate Coupons**: Check detected codes against the active coupon list
-4. **Generate Report**: Aggregate by keyword, flag invalid/outdated coupons
-5. **Notify**: Send formatted report to Slack channel
-6. **Persist**: Data available in DB for Looker dashboards
+2. **Fetch Coupons**: Retrieve active coupon codes from Google Sheets
+3. **Scan Text**: Use regex patterns to find coupon codes in `response_text`
+4. **Validate Coupons**: Check detected codes against the active coupon list
+5. **Generate Report**: Aggregate by keyword, flag invalid/outdated coupons
+6. **Notify**: Send formatted report to Slack channel
+7. **Persist**: Data available in DB for Looker dashboards
 
 ## Key Features
 
-- **Coupon Detection**: Scans AI Overview response text for configured coupon codes
+- **Coupon Detection**: Scans AI Overview response text for coupon codes from Google Sheets
 - **Invalid Coupon Alerts**: Flags coupons not in the active list (potentially outdated)
 - **Weekly Slack Reports**: Summarizes coupon appearances by keyword and location
 - **Cloud Run Job**: Deployed as a scheduled Cloud Run Job
@@ -74,6 +76,7 @@ Before running locally, ensure you have:
 - **uv**: Python package manager
 - **Database Access**: PostgreSQL credentials for Marketing Hub database
 - **Slack Webhook**: Webhook URL for your alert channel
+- **Google Workspace Credentials**: Service account with Google Sheets API access
 
 ## Installation & Configuration
 
@@ -90,21 +93,18 @@ uv sync
 
 Create a `.env` file in the project root:
 
-| Variable                | Description                              | Required | Default          |
-|:------------------------|:-----------------------------------------|:--------:|:-----------------|
-| `DATABASE_URL`          | PostgreSQL connection string             |   Yes    | -                |
-| `SLACK_WEBHOOK_URL`     | Webhook URL for sending alerts           |   Yes    | -                |
-| `SLACK_CHANNEL`         | Default channel for notifications        |    No    | `#coupon-alerts` |
-| `COUPONS`               | JSON array of coupon codes to track      |   Yes    | `[]`             |
-| `REPORT_LOOKBACK_DAYS`  | Days to include in weekly report         |    No    | `7`              |
+| Variable                       | Description                                    | Required |
+|:-------------------------------|:-----------------------------------------------|:--------:|
+| `DATABASE_URL`                 | PostgreSQL connection string                   |   Yes    |
+| `SLACK_WEBHOOK_URL`            | Webhook URL for sending alerts                 |   Yes    |
+| `GOOGLE_WORKSPACE_CREDENTIALS` | Service account credentials JSON               |   Yes    |
 
 Example `.env`:
 
 ```bash
 DATABASE_URL=postgresql://user:pass@host:5432/growth-marketing-db
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/xxx/xxx
-COUPONS=["NORDVPN70","NORD70OFF","VPNDEAL2024"]
-REPORT_LOOKBACK_DAYS=7
+GOOGLE_WORKSPACE_CREDENTIALS={"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}
 ```
 
 ## Usage
@@ -117,13 +117,6 @@ python -m coupon_mention_tracker
 
 # Or directly
 python src/coupon_mention_tracker/main.py
-```
-
-### Environment Variables Override
-
-```bash
-# Override lookback days
-REPORT_LOOKBACK_DAYS=14 python -m coupon_mention_tracker
 ```
 
 ## Development
@@ -152,6 +145,7 @@ coupon-mention-tracker/
 │       │   └── report.py                  # Report generation
 │       └── clients/
 │           ├── __init__.py
+│           ├── google_sheets_client.py    # Google Sheets API client
 │           └── slack.py                   # Slack API client
 ├── tests/
 ├── pyproject.toml
@@ -194,6 +188,9 @@ gcloud artifacts repositories create cloud-run-jobs \
 # Store secrets in Secret Manager
 echo -n "https://hooks.slack.com/..." | \
   gcloud secrets create slack-webhook --data-file=-
+
+echo -n '{"type":"service_account",...}' | \
+  gcloud secrets create google-workspace-credentials --data-file=-
 ```
 
 #### Deploy with Cloud Build
@@ -213,17 +210,7 @@ gcloud run jobs deploy coupon-mention-tracker \
   --source . \
   --region europe-west3 \
   --set-env-vars "DATABASE_URL=..." \
-  --set-secrets "SLACK_WEBHOOK_URL=slack-webhook:latest"
-```
-
-#### Configure Environment Variables
-
-```bash
-gcloud run jobs update coupon-mention-tracker \
-  --region europe-west3 \
-  --set-env-vars "REPORT_LOOKBACK_DAYS=7" \
-  --set-env-vars 'COUPONS=["NORDVPN70","NORD70OFF"]' \
-  --set-secrets "DATABASE_URL=db-url:latest,SLACK_WEBHOOK_URL=slack-webhook:latest"
+  --set-secrets "SLACK_WEBHOOK_URL=slack-webhook:latest,GOOGLE_WORKSPACE_CREDENTIALS=google-workspace-credentials:latest"
 ```
 
 #### Schedule with Cloud Scheduler
@@ -241,15 +228,15 @@ gcloud scheduler jobs create http coupon-tracker-weekly \
 
 ### Common Issues
 
-**1. Database Connection Failed**
+**Database Connection Failed**
 - **Cause**: Invalid credentials or network access
 - **Resolution**: Verify `DATABASE_URL` and VPC connector settings
 
-**2. No Coupons Detected**
-- **Cause**: Coupons list is empty or patterns don't match
-- **Resolution**: Check `COUPONS` env var is a valid JSON array
+**No Coupons Detected**
+- **Cause**: Google Sheets not accessible or empty coupon column
+- **Resolution**: Verify `GOOGLE_WORKSPACE_CREDENTIALS` and sheet permissions
 
-**3. Slack Message Not Sent**
+**Slack Message Not Sent**
 - **Cause**: Invalid webhook URL or network issues
 - **Resolution**: Verify `SLACK_WEBHOOK_URL` in Secret Manager
 
@@ -258,8 +245,8 @@ gcloud scheduler jobs create http coupon-tracker-weekly \
 **How often does the job run?**
 Weekly (Monday 9 AM) via Cloud Scheduler.
 
-**Can I track coupons for multiple products?**
-Yes, the system tracks by product automatically based on keyword associations.
+**Where are coupons managed?**
+Active coupon codes are maintained in Google Sheets, allowing non-technical team members to update the list.
 
 **What happens if an outdated coupon is detected?**
 It will be flagged in logs and highlighted in the Slack notification.

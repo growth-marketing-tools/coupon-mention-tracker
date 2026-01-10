@@ -27,14 +27,26 @@ class Settings(BaseSettings):
         description="Slack webhook URL for sending alerts",
     )
     slack_channel: str = Field(
-        default="#coupon-alerts",
+        default="#growth-marketing-alerts",
         description="Default Slack channel for alerts",
     )
 
-    # Coupon tracking
-    coupons: list[str] = Field(
-        default_factory=list,
-        description="List of coupon codes to track",
+    # Google Sheets
+    google_sheets_spreadsheet_id: str = Field(
+        default="19gKGRN_FjplOpMUqFtGOrR53htFZR67mUlWrJDWT4UI",
+        description="Google Sheets spreadsheet ID for coupon data",
+    )
+    google_sheets_coupon_gid: int = Field(
+        default=0,
+        description="Sheet GID containing coupon codes",
+    )
+    google_sheets_coupon_column: str = Field(
+        default="Coupon",
+        description="Column name containing coupon codes",
+    )
+    google_workspace_credentials: str = Field(
+        ...,
+        description="Google Workspace service account credentials JSON",
     )
 
     # Report settings
