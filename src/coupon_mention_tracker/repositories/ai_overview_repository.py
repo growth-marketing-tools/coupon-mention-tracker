@@ -1,5 +1,6 @@
 """Repository for querying AI Overview data from PostgreSQL."""
 
+import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -14,6 +15,21 @@ from coupon_mention_tracker.repositories.sql_queries import (
     GET_RESULTS_FOR_PERIOD_QUERY,
     build_get_prompts_query,
 )
+
+
+def _parse_sources(sources: str | list | None) -> list[dict] | None:
+    """Parse sources from database JSON string to list of dicts."""
+    if sources is None:
+        return None
+    if isinstance(sources, list):
+        return sources
+    if isinstance(sources, str):
+        try:
+            parsed = json.loads(sources)
+            return parsed if isinstance(parsed, list) else None
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 class AIOverviewRepository:
@@ -92,7 +108,7 @@ class AIOverviewRepository:
         self,
         start_date: date,
         end_date: date | None = None,
-        provider: str = "google",
+        provider: str = "google_ai_overview",
     ) -> list[tuple[AIOverviewPrompt, AIOverviewResult]]:
         """Fetch AI Overview results with their prompts for a date range.
 
@@ -133,7 +149,7 @@ class AIOverviewRepository:
                 scraped_date=row["scraped_date"],
                 scraped_at=row["scraped_at"],
                 response_text=row["response_text"],
-                sources=row["sources"],
+                sources=_parse_sources(row["sources"]),
                 ahrefs_volume=row["ahrefs_volume"],
                 sentiment_label=row["sentiment_label"],
             )
@@ -144,7 +160,7 @@ class AIOverviewRepository:
     async def get_results_last_n_days(
         self,
         days: int = 7,
-        provider: str = "google",
+        provider: str = "google_ai_overview",
     ) -> list[tuple[AIOverviewPrompt, AIOverviewResult]]:
         """Fetch AI Overview results from the last N days.
 

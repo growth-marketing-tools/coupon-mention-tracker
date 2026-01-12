@@ -27,7 +27,7 @@ class AIOverviewResult(BaseModel):
     scraped_date: date
     scraped_at: datetime | None = None
     response_text: str | None = None
-    sources: dict | None = None
+    sources: list[dict] | None = None
     ahrefs_volume: int | None = None
     sentiment_label: str | None = None
 
@@ -59,6 +59,7 @@ class WeeklyReportRow(BaseModel):
     is_valid_coupon: bool | None = Field(
         description="Whether detected coupon is in active list"
     )
+    first_seen: date | None = Field(description="First scrape date in period")
     last_seen: date | None = Field(description="Most recent scrape date")
     mention_count: int = Field(
         default=0, description="Number of times coupon was seen this period"

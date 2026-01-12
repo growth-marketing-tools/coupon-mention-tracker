@@ -88,3 +88,10 @@ line-ending = "auto"
 
 [tool.ty.environment]
 python-version = "3.12"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+]

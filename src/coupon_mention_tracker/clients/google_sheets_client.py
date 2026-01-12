@@ -156,7 +156,9 @@ class GoogleSheetsClient:
 
         column_letter = self._column_index_to_letter(column_index)
         start_row = 2 if skip_header else 1
-        range_notation = f"'{sheet_title}'!{column_letter}{start_row}:{column_letter}"
+        range_notation = (
+            f"'{sheet_title}'!{column_letter}{start_row}:{column_letter}"
+        )
 
         try:
             result = (

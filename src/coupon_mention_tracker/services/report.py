@@ -2,13 +2,24 @@
 
 from collections import defaultdict
 from datetime import date, timedelta
+from typing import Protocol
 
-from coupon_mention_tracker.clients.slack import SlackNotifier
-from coupon_mention_tracker.core.models import CouponMatch, WeeklyReportRow
-from coupon_mention_tracker.repositories.ai_overview import (
-    AIOverviewRepository,
+from coupon_mention_tracker.clients.slack_client import SlackNotifier
+from coupon_mention_tracker.core.models import (
+    AIOverviewPrompt,
+    AIOverviewResult,
+    CouponMatch,
+    WeeklyReportRow,
 )
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
+
+
+class _AIOverviewRepositoryLike(Protocol):
+    """The minimal repository API needed by WeeklyReportGenerator."""
+
+    async def get_results_last_n_days(
+        self, days: int = 7
+    ) -> list[tuple[AIOverviewPrompt, AIOverviewResult]]: ...
 
 
 class WeeklyReportGenerator:
@@ -16,7 +27,7 @@ class WeeklyReportGenerator:
 
     def __init__(
         self,
-        repository: AIOverviewRepository,
+        repository: _AIOverviewRepositoryLike,
         matcher: CouponMatcher,
         notifier: SlackNotifier,
     ) -> None:
@@ -48,8 +59,9 @@ class WeeklyReportGenerator:
         keyword_data: dict[tuple, dict] = defaultdict(
             lambda: {
                 "has_ai_overview": False,
-                "coupons": defaultdict(int),
-                "last_seen": None,
+                "coupons": defaultdict(
+                    lambda: {"count": 0, "first_seen": None, "last_seen": None}
+                ),
                 "product": "",
                 "location": None,
             }
@@ -64,15 +76,23 @@ class WeeklyReportGenerator:
             data["product"] = prompt.primary_product
             data["location"] = prompt.location
 
-            if (
-                data["last_seen"] is None
-                or result.scraped_date > data["last_seen"]
-            ):
-                data["last_seen"] = result.scraped_date
-
             matches = self._matcher.analyze_result(prompt, result)
             for match in matches:
-                data["coupons"][match.coupon_code] += 1
+                coupon_data = data["coupons"][match.coupon_code]
+                coupon_data["count"] += 1
+
+                if (
+                    coupon_data["first_seen"] is None
+                    or result.scraped_date < coupon_data["first_seen"]
+                ):
+                    coupon_data["first_seen"] = result.scraped_date
+
+                if (
+                    coupon_data["last_seen"] is None
+                    or result.scraped_date > coupon_data["last_seen"]
+                ):
+                    coupon_data["last_seen"] = result.scraped_date
+
                 all_matches.append(match)
 
         rows: list[WeeklyReportRow] = []
@@ -80,14 +100,19 @@ class WeeklyReportGenerator:
             if data["coupons"]:
                 top_coupon = max(
                     data["coupons"].items(),
-                    key=lambda x: x[1],
+                    key=lambda x: x[1]["count"],
                 )
-                coupon_code, count = top_coupon
+                coupon_code, coupon_info = top_coupon
                 is_valid = self._matcher.is_valid_coupon(coupon_code)
+                count = coupon_info["count"]
+                first_seen = coupon_info["first_seen"]
+                last_seen = coupon_info["last_seen"]
             else:
                 coupon_code = None
                 count = 0
                 is_valid = None
+                first_seen = None
+                last_seen = None
 
             rows.append(
                 WeeklyReportRow(
@@ -97,7 +122,8 @@ class WeeklyReportGenerator:
                     has_ai_overview=data["has_ai_overview"],
                     coupon_detected=coupon_code,
                     is_valid_coupon=is_valid,
-                    last_seen=data["last_seen"],
+                    first_seen=first_seen,
+                    last_seen=last_seen,
                     mention_count=count,
                 )
             )

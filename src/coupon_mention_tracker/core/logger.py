@@ -106,6 +106,15 @@ def setup_logging(environment: Environment | None = None) -> None:
         root_logger.addHandler(logfire.LogfireLoggingHandler())
 
     root_logger.setLevel(_resolve_log_level(environment.log_level))
+
+    # Avoid leaking credentials (e.g., Slack webhook URLs) and reduce noisy
+    # third-party INFO logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("googleapiclient.discovery_cache").setLevel(
+        logging.WARNING
+    )
+
     _logging_state.configured = True
 
 

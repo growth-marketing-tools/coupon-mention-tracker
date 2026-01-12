@@ -1,24 +1,35 @@
 """Main entry point for Coupon Mention Tracker Cloud Run Job."""
 
 import asyncio
-import logging
 import sys
 from datetime import date, timedelta
 
-from coupon_mention_tracker.clients.slack import SlackNotifier
-from coupon_mention_tracker.core.config import get_settings
-from coupon_mention_tracker.repositories.ai_overview import (
+from coupon_mention_tracker.clients.google_sheets_client import (
+    GoogleSheetsClient,
+)
+from coupon_mention_tracker.clients.slack_client import SlackNotifier
+from coupon_mention_tracker.core.config import Settings, get_settings
+from coupon_mention_tracker.core.logger import get_logger, setup_logging
+from coupon_mention_tracker.repositories.ai_overview_repository import (
     AIOverviewRepository,
 )
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 from coupon_mention_tracker.services.report import WeeklyReportGenerator
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
+def fetch_coupons_from_google_sheets(settings: Settings) -> list[str]:
+    """Fetch coupon codes from Google Sheets."""
+    client = GoogleSheetsClient(
+        spreadsheet_id=settings.google_sheets_spreadsheet_id,
+        credentials_json=settings.google_workspace_credentials,
+    )
+    return client.get_coupons(
+        gid=settings.google_sheets_coupon_gid,
+        column_name=settings.google_sheets_coupon_column,
+    )
 
 
 async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
@@ -32,17 +43,22 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         Exit code (0 for success, 1 for failure).
     """
     settings = get_settings()
-
-    repository = AIOverviewRepository(settings.database_url_str)
-    matcher = CouponMatcher(settings.coupons)
-    notifier = SlackNotifier(
-        webhook_url=settings.slack_webhook_url,
-        default_channel=settings.slack_channel,
-    )
-
-    generator = WeeklyReportGenerator(repository, matcher, notifier)
+    repository: AIOverviewRepository | None = None
 
     try:
+        coupons = fetch_coupons_from_google_sheets(settings)
+        logger.info("Tracking %d coupon codes", len(coupons))
+        if not coupons:
+            logger.warning("No coupon codes found; matcher will never match")
+
+        repository = AIOverviewRepository(settings.database_url_str)
+        matcher = CouponMatcher(coupons)
+        notifier = SlackNotifier(
+            webhook_url=settings.slack_webhook_url,
+            default_channel=settings.slack_channel,
+        )
+        generator = WeeklyReportGenerator(repository, matcher, notifier)
+
         logger.info("Connecting to database...")
         await repository.connect()
 
@@ -98,16 +114,18 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         return 1
 
     finally:
-        await repository.disconnect()
+        if repository is not None:
+            await repository.disconnect()
 
 
 def main() -> None:
     """Main entry point for Cloud Run Job."""
+    setup_logging()
+
     settings = get_settings()
     days = settings.report_lookback_days
 
     logger.info("Starting Coupon Mention Tracker job")
-    logger.info("Tracking %d coupon codes", len(settings.coupons))
 
     exit_code = asyncio.run(run_weekly_report(days=days, send_slack=True))
     sys.exit(exit_code)

@@ -54,6 +54,24 @@ class SlackNotifier:
             )
             return response.status_code == HTTPStatus.OK
 
+    def _format_date_range(
+        self,
+        first_seen: date | None,
+        last_seen: date | None,
+    ) -> str:
+        """Format a date range for display."""
+        if first_seen is None and last_seen is None:
+            return ""
+        if first_seen and last_seen:
+            if first_seen == last_seen:
+                return f"({first_seen})"
+            return f"({first_seen} to {last_seen})"
+        if last_seen:
+            return f"({last_seen})"
+        if first_seen:
+            return f"({first_seen})"
+        return ""
+
     def _format_coupon_match_block(self, match: CouponMatch) -> dict:
         """Format a single coupon match as a Slack block."""
         location = match.location or "Global"
@@ -92,7 +110,7 @@ class SlackNotifier:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "🎟️ Coupon Mentions Detected in AI Overviews",
+                    "text": "Coupon mentions detected in AI Overviews",
                 },
             },
             {
@@ -147,7 +165,7 @@ class SlackNotifier:
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "📊 Weekly Coupon Mention Report",
+                    "text": "Weekly coupon mention report",
                 },
             },
             {
@@ -166,11 +184,9 @@ class SlackNotifier:
                     "type": "mrkdwn",
                     "text": (
                         f"*Summary*\n"
-                        f"• Keywords tracked: {len(rows)}\n"
-                        f"• Keywords with AI Overview: "
-                        f"{sum(1 for r in rows if r.has_ai_overview)}\n"
+                        f"• Keywords analyzed: {len(rows)}\n"
                         f"• Coupon mentions found: {len(with_coupons)}\n"
-                        f"• Invalid/outdated coupons: {len(invalid_coupons)}"
+                        f"• Untracked coupons: {len(invalid_coupons)}"
                     ),
                 },
             },
@@ -183,12 +199,15 @@ class SlackNotifier:
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "*⚠️ Invalid Coupons Detected:*",
+                        "text": "*Untracked coupons detected*",
                     },
                 }
             )
             for row in invalid_coupons[:5]:
                 location = row.location or "Global"
+                date_range = self._format_date_range(
+                    row.first_seen, row.last_seen
+                )
                 blocks.append(
                     {
                         "type": "section",
@@ -196,7 +215,7 @@ class SlackNotifier:
                             "type": "mrkdwn",
                             "text": (
                                 f"• `{row.coupon_detected}` in "
-                                f"_{row.keyword}_ ({location})"
+                                f"_{row.keyword}_ ({location}) {date_range}"
                             ),
                         },
                     }
@@ -209,13 +228,16 @@ class SlackNotifier:
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "*✅ Valid Coupon Mentions:*",
+                        "text": "*Valid coupon mentions*",
                     },
                 }
             )
             valid = [r for r in with_coupons if r.is_valid_coupon is True]
             for row in valid[:10]:
                 location = row.location or "Global"
+                date_range = self._format_date_range(
+                    row.first_seen, row.last_seen
+                )
                 blocks.append(
                     {
                         "type": "section",
@@ -223,8 +245,7 @@ class SlackNotifier:
                             "type": "mrkdwn",
                             "text": (
                                 f"• `{row.coupon_detected}` in "
-                                f"_{row.keyword}_ ({location}) - "
-                                f"seen {row.mention_count}x"
+                                f"_{row.keyword}_ ({location}) {date_range}"
                             ),
                         },
                     }
@@ -251,6 +272,6 @@ class SlackNotifier:
         blocks = self._build_weekly_report_blocks(rows, start_date, end_date)
 
         return await self.send_message(
-            text=f"Weekly Coupon Report: {start_date} to {end_date}",
+            text=f"Weekly coupon report: {start_date} to {end_date}",
             blocks=blocks,
         )
