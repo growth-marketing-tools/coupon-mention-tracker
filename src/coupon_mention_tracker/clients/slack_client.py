@@ -150,6 +150,9 @@ class SlackNotifier:
         end_date: date,
     ) -> list[Block]:
         """Build Slack blocks for weekly report."""
+        unique_keywords = {
+            (r.keyword, r.location) for r in rows if r.has_ai_overview
+        }
         with_coupons = [r for r in rows if r.coupon_detected]
         invalid_coupons = [
             r for r in with_coupons if r.is_valid_coupon is False
@@ -171,7 +174,7 @@ class SlackNotifier:
                 text=MarkdownTextObject(
                     text=(
                         f"*Summary*\n"
-                        f"• Keywords analyzed: {len(rows)}\n"
+                        f"• Keywords analyzed: {len(unique_keywords)}\n"
                         f"• Coupon mentions found: {len(with_coupons)}\n"
                         f"• Untracked coupons: {len(invalid_coupons)}"
                     )
@@ -186,7 +189,7 @@ class SlackNotifier:
                     text=MarkdownTextObject(text="*Untracked coupons detected*")
                 )
             )
-            for row in invalid_coupons[:5]:
+            for row in invalid_coupons:
                 location = row.location or "Global"
                 date_range = self._format_date_range(
                     row.first_seen, row.last_seen
@@ -210,7 +213,7 @@ class SlackNotifier:
                 )
             )
             valid = [r for r in with_coupons if r.is_valid_coupon is True]
-            for row in valid[:10]:
+            for row in valid:
                 location = row.location or "Global"
                 date_range = self._format_date_range(
                     row.first_seen, row.last_seen

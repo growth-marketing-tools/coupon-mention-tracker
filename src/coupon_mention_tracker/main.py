@@ -68,10 +68,14 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
+        unique_keywords = {(r.keyword, r.location) for r in rows}
+        keywords_with_overview = {
+            (r.keyword, r.location) for r in rows if r.has_ai_overview
+        }
         logger.info(
             "Report generated: %d keywords, %d with AI Overview, %d matches",
-            len(rows),
-            sum(1 for r in rows if r.has_ai_overview),
+            len(unique_keywords),
+            len(keywords_with_overview),
             len(matches),
         )
 

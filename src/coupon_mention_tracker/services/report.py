@@ -98,37 +98,45 @@ class WeeklyReportGenerator:
         rows: list[WeeklyReportRow] = []
         for (keyword, location), data in keyword_data.items():
             if data["coupons"]:
-                top_coupon = max(
-                    data["coupons"].items(),
-                    key=lambda x: x[1]["count"],
-                )
-                coupon_code, coupon_info = top_coupon
-                is_valid = self._matcher.is_valid_coupon(coupon_code)
-                count = coupon_info["count"]
-                first_seen = coupon_info["first_seen"]
-                last_seen = coupon_info["last_seen"]
+                for coupon_code, coupon_info in data["coupons"].items():
+                    rows.append(
+                        WeeklyReportRow(
+                            keyword=keyword,
+                            location=location,
+                            product=data["product"],
+                            has_ai_overview=data["has_ai_overview"],
+                            coupon_detected=coupon_code,
+                            is_valid_coupon=self._matcher.is_valid_coupon(
+                                coupon_code
+                            ),
+                            first_seen=coupon_info["first_seen"],
+                            last_seen=coupon_info["last_seen"],
+                            mention_count=coupon_info["count"],
+                        )
+                    )
             else:
-                coupon_code = None
-                count = 0
-                is_valid = None
-                first_seen = None
-                last_seen = None
-
-            rows.append(
-                WeeklyReportRow(
-                    keyword=keyword,
-                    location=location,
-                    product=data["product"],
-                    has_ai_overview=data["has_ai_overview"],
-                    coupon_detected=coupon_code,
-                    is_valid_coupon=is_valid,
-                    first_seen=first_seen,
-                    last_seen=last_seen,
-                    mention_count=count,
+                rows.append(
+                    WeeklyReportRow(
+                        keyword=keyword,
+                        location=location,
+                        product=data["product"],
+                        has_ai_overview=data["has_ai_overview"],
+                        coupon_detected=None,
+                        is_valid_coupon=None,
+                        first_seen=None,
+                        last_seen=None,
+                        mention_count=0,
+                    )
                 )
-            )
 
-        rows.sort(key=lambda r: (r.coupon_detected is None, r.keyword))
+        rows.sort(
+            key=lambda r: (
+                r.keyword,
+                r.location or "",
+                r.coupon_detected is None,
+                r.coupon_detected or "",
+            )
+        )
 
         return rows, all_matches
 

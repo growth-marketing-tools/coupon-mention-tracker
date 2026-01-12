@@ -84,15 +84,14 @@ async def test_generate_report_builds_rows_and_matches() -> None:
 
     assert len(matches) == 2
 
-    assert rows[0].keyword == "nordvpn coupon"
-    assert rows[0].coupon_detected == "SAVE10"
-    assert rows[0].is_valid_coupon is True
-    assert rows[0].mention_count == 2
-    assert rows[0].last_seen == date(2026, 1, 2)
+    row_by_key = {(row.keyword, row.coupon_detected): row for row in rows}
+    match_row = row_by_key[("nordvpn coupon", "SAVE10")]
+    assert match_row.is_valid_coupon is True
+    assert match_row.mention_count == 2
+    assert match_row.last_seen == date(2026, 1, 2)
 
-    assert rows[1].keyword == "nordpass pricing"
-    assert rows[1].coupon_detected is None
-    assert rows[1].is_valid_coupon is None
+    empty_row = row_by_key[("nordpass pricing", None)]
+    assert empty_row.is_valid_coupon is None
 
 
 @pytest.mark.asyncio
