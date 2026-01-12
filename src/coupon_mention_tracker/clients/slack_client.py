@@ -3,7 +3,16 @@
 from datetime import date
 from http import HTTPStatus
 
-import httpx
+from slack_sdk.models.blocks import (
+    Block,
+    ContextBlock,
+    DividerBlock,
+    HeaderBlock,
+    MarkdownTextObject,
+    PlainTextObject,
+    SectionBlock,
+)
+from slack_sdk.webhook.async_client import AsyncWebhookClient
 
 from coupon_mention_tracker.core.models import CouponMatch, WeeklyReportRow
 
@@ -27,11 +36,12 @@ class SlackNotifier:
         """
         self._webhook_url = webhook_url
         self._default_channel = default_channel
+        self._client = AsyncWebhookClient(url=webhook_url)
 
     async def send_message(
         self,
         text: str,
-        blocks: list[dict] | None = None,
+        blocks: list[Block] | list[dict] | None = None,
     ) -> bool:
         """Send a message to Slack.
 
@@ -42,20 +52,14 @@ class SlackNotifier:
         Returns:
             True if message was sent successfully.
         """
-        payload: dict = {"text": text}
-        if blocks:
-            payload["blocks"] = blocks
+        response = await self._client.send(
+            text=text,
+            blocks=blocks,
+        )
+        return response.status_code == HTTPStatus.OK and response.body == "ok"
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self._webhook_url,
-                json=payload,
-                timeout=30.0,
-            )
-            return response.status_code == HTTPStatus.OK
-
+    @staticmethod
     def _format_date_range(
-        self,
         first_seen: date | None,
         last_seen: date | None,
     ) -> str:
@@ -72,23 +76,22 @@ class SlackNotifier:
             return f"({first_seen})"
         return ""
 
-    def _format_coupon_match_block(self, match: CouponMatch) -> dict:
+    @staticmethod
+    def _format_coupon_match_block(match: CouponMatch) -> Block:
         """Format a single coupon match as a Slack block."""
         location = match.location or "Global"
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
+        return SectionBlock(
+            text=MarkdownTextObject(
+                text=(
                     f"*Keyword:* `{match.keyword}`\n"
                     f"*Location:* {location}\n"
                     f"*Product:* {match.product}\n"
                     f"*Coupon:* `{match.coupon_code}`\n"
                     f"*Date:* {match.scraped_date}\n"
                     f"*Context:* _{match.match_context}_"
-                ),
-            },
-        }
+                )
+            )
+        )
 
     async def send_coupon_alert(
         self,
@@ -105,42 +108,34 @@ class SlackNotifier:
         if not matches:
             return True
 
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Coupon mentions detected in AI Overviews",
-                },
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"Found {len(matches)} coupon mention(s)",
-                    }
-                ],
-            },
-            {"type": "divider"},
+        blocks: list[Block] = [
+            HeaderBlock(
+                text=PlainTextObject(
+                    text="Coupon mentions detected in AI Overviews"
+                )
+            ),
+            ContextBlock(
+                elements=[
+                    MarkdownTextObject(
+                        text=f"Found {len(matches)} coupon mention(s)"
+                    )
+                ]
+            ),
+            DividerBlock(),
         ]
 
         for match in matches[:MAX_DISPLAY_ITEMS]:
             blocks.append(self._format_coupon_match_block(match))
-            blocks.append({"type": "divider"})
+            blocks.append(DividerBlock())
 
         if len(matches) > MAX_DISPLAY_ITEMS:
             remaining = len(matches) - MAX_DISPLAY_ITEMS
             blocks.append(
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"_...and {remaining} more_",
-                        }
-                    ],
-                }
+                ContextBlock(
+                    elements=[
+                        MarkdownTextObject(text=f"_...and {remaining} more_")
+                    ]
+                )
             )
 
         return await self.send_message(
@@ -153,55 +148,43 @@ class SlackNotifier:
         rows: list[WeeklyReportRow],
         start_date: date,
         end_date: date,
-    ) -> list[dict]:
+    ) -> list[Block]:
         """Build Slack blocks for weekly report."""
         with_coupons = [r for r in rows if r.coupon_detected]
         invalid_coupons = [
             r for r in with_coupons if r.is_valid_coupon is False
         ]
 
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Weekly coupon mention report",
-                },
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"Period: {start_date} to {end_date}",
-                    }
-                ],
-            },
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
+        blocks: list[Block] = [
+            HeaderBlock(
+                text=PlainTextObject(text="Weekly coupon mention report")
+            ),
+            ContextBlock(
+                elements=[
+                    MarkdownTextObject(
+                        text=f"Period: {start_date} to {end_date}"
+                    )
+                ]
+            ),
+            DividerBlock(),
+            SectionBlock(
+                text=MarkdownTextObject(
+                    text=(
                         f"*Summary*\n"
                         f"• Keywords analyzed: {len(rows)}\n"
                         f"• Coupon mentions found: {len(with_coupons)}\n"
                         f"• Untracked coupons: {len(invalid_coupons)}"
-                    ),
-                },
-            },
-            {"type": "divider"},
+                    )
+                )
+            ),
+            DividerBlock(),
         ]
 
         if invalid_coupons:
             blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "*Untracked coupons detected*",
-                    },
-                }
+                SectionBlock(
+                    text=MarkdownTextObject(text="*Untracked coupons detected*")
+                )
             )
             for row in invalid_coupons[:5]:
                 location = row.location or "Global"
@@ -209,28 +192,22 @@ class SlackNotifier:
                     row.first_seen, row.last_seen
                 )
                 blocks.append(
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": (
+                    SectionBlock(
+                        text=MarkdownTextObject(
+                            text=(
                                 f"• `{row.coupon_detected}` in "
                                 f"_{row.keyword}_ ({location}) {date_range}"
-                            ),
-                        },
-                    }
+                            )
+                        )
+                    )
                 )
 
         if with_coupons:
-            blocks.append({"type": "divider"})
+            blocks.append(DividerBlock())
             blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "*Valid coupon mentions*",
-                    },
-                }
+                SectionBlock(
+                    text=MarkdownTextObject(text="*Valid coupon mentions*")
+                )
             )
             valid = [r for r in with_coupons if r.is_valid_coupon is True]
             for row in valid[:10]:
@@ -239,16 +216,14 @@ class SlackNotifier:
                     row.first_seen, row.last_seen
                 )
                 blocks.append(
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": (
+                    SectionBlock(
+                        text=MarkdownTextObject(
+                            text=(
                                 f"• `{row.coupon_detected}` in "
                                 f"_{row.keyword}_ ({location}) {date_range}"
-                            ),
-                        },
-                    }
+                            )
+                        )
+                    )
                 )
 
         return blocks

@@ -7,6 +7,7 @@ from http import HTTPStatus
 from uuid import uuid4
 
 import pytest
+from slack_sdk.models.blocks import HeaderBlock, SectionBlock
 
 from coupon_mention_tracker.clients.slack_client import (
     MAX_DISPLAY_ITEMS,
@@ -20,23 +21,21 @@ async def test_send_message_posts_payload(monkeypatch) -> None:
     calls = []
 
     class _Response:
-        def __init__(self, status_code: int) -> None:
+        def __init__(self, status_code: int, body: str) -> None:
             self.status_code = status_code
+            self.body = body
 
-    class _Client:
-        async def __aenter__(self):
-            return self
+    class _MockClient:
+        def __init__(self, url: str) -> None:
+            self.url = url
 
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def post(self, url, json, timeout):
-            calls.append((url, json, timeout))
-            return _Response(HTTPStatus.OK)
+        async def send(self, text, blocks=None):
+            calls.append((self.url, text, blocks))
+            return _Response(HTTPStatus.OK, "ok")
 
     monkeypatch.setattr(
-        "coupon_mention_tracker.clients.slack_client.httpx.AsyncClient",
-        lambda: _Client(),
+        "coupon_mention_tracker.clients.slack_client.AsyncWebhookClient",
+        _MockClient,
     )
 
     notifier = SlackNotifier(webhook_url="https://example.invalid")
@@ -45,8 +44,8 @@ async def test_send_message_posts_payload(monkeypatch) -> None:
     assert ok is True
     assert calls
     assert calls[0][0] == "https://example.invalid"
-    assert calls[0][1]["text"] == "hello"
-    assert "blocks" in calls[0][1]
+    assert calls[0][1] == "hello"
+    assert calls[0][2] == [{"type": "divider"}]
 
 
 def test_format_coupon_match_block_defaults_location_global() -> None:
@@ -62,7 +61,8 @@ def test_format_coupon_match_block_defaults_location_global() -> None:
     )
 
     block = notifier._format_coupon_match_block(match)
-    assert "Global" in block["text"]["text"]
+    assert isinstance(block, SectionBlock)
+    assert "Global" in block.text.text
 
 
 @pytest.mark.asyncio
@@ -102,9 +102,9 @@ async def test_send_coupon_alert_truncates_and_adds_remaining(
 
     assert ok is True
     assert "Found" in captured["text"]
+    # Inspect block objects
     assert any(
-        b.get("type") == "context"
-        and "...and" in b.get("elements", [{}])[0].get("text", "")
+        b.type == "context" and b.elements and "...and" in b.elements[0].text
         for b in captured["blocks"]
     )
 
@@ -142,10 +142,11 @@ def test_build_weekly_report_blocks_includes_summary_and_invalid() -> None:
         end_date=date(2026, 1, 8),
     )
 
-    text_blob = "\n".join(
-        b.get("text", {}).get("text", "")
-        for b in blocks
-        if isinstance(b.get("text"), dict)
-    )
+    # Extract text from SectionBlocks and HeaderBlocks
+    lines = []
+    for block in blocks:
+        if isinstance(block, (SectionBlock, HeaderBlock)) and block.text:
+            lines.append(block.text.text)
+    text_blob = "\n".join(lines)
     assert "Untracked coupons detected" in text_blob
     assert "OLD10" in text_blob
