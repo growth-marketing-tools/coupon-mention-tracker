@@ -1,5 +1,6 @@
 """Slack notification service for sending coupon mention alerts."""
 
+from collections import defaultdict
 from datetime import date
 from http import HTTPStatus
 
@@ -92,6 +93,37 @@ class SlackNotifier:
                 )
             )
         )
+
+    @staticmethod
+    def _group_rows_by_coupon(
+        rows: list[WeeklyReportRow],
+    ) -> list[tuple[str, list[WeeklyReportRow]]]:
+        """Group report rows by coupon code and sort A to Z."""
+        grouped: dict[str, list[WeeklyReportRow]] = defaultdict(list)
+        for row in rows:
+            if row.coupon_detected:
+                grouped[row.coupon_detected].append(row)
+        return sorted(grouped.items(), key=lambda item: item[0].casefold())
+
+    @staticmethod
+    def _format_coupon_group_text(
+        coupon_code: str,
+        rows: list[WeeklyReportRow],
+    ) -> str:
+        """Format grouped coupon rows for Slack display."""
+        sorted_rows = sorted(
+            rows,
+            key=lambda r: (r.keyword.casefold(), (r.location or "").casefold()),
+        )
+        lines = [f"*`{coupon_code}`*"]
+        for row in sorted_rows:
+            location = row.location or "Global"
+            date_range = SlackNotifier._format_date_range(
+                row.first_seen, row.last_seen
+            )
+            date_suffix = f" {date_range}" if date_range else ""
+            lines.append(f"• _{row.keyword}_ ({location}){date_suffix}")
+        return "\n".join(lines)
 
     async def send_coupon_alert(
         self,
@@ -189,17 +221,14 @@ class SlackNotifier:
                     text=MarkdownTextObject(text="*Untracked coupons detected*")
                 )
             )
-            for row in invalid_coupons:
-                location = row.location or "Global"
-                date_range = self._format_date_range(
-                    row.first_seen, row.last_seen
-                )
+            for coupon_code, grouped_rows in self._group_rows_by_coupon(
+                invalid_coupons
+            ):
                 blocks.append(
                     SectionBlock(
                         text=MarkdownTextObject(
-                            text=(
-                                f"• `{row.coupon_detected}` in "
-                                f"_{row.keyword}_ ({location}) {date_range}"
+                            text=self._format_coupon_group_text(
+                                coupon_code, grouped_rows
                             )
                         )
                     )
@@ -213,17 +242,14 @@ class SlackNotifier:
                 )
             )
             valid = [r for r in with_coupons if r.is_valid_coupon is True]
-            for row in valid:
-                location = row.location or "Global"
-                date_range = self._format_date_range(
-                    row.first_seen, row.last_seen
-                )
+            for coupon_code, grouped_rows in self._group_rows_by_coupon(
+                valid
+            ):
                 blocks.append(
                     SectionBlock(
                         text=MarkdownTextObject(
-                            text=(
-                                f"• `{row.coupon_detected}` in "
-                                f"_{row.keyword}_ ({location}) {date_range}"
+                            text=self._format_coupon_group_text(
+                                coupon_code, grouped_rows
                             )
                         )
                     )
