@@ -1,8 +1,9 @@
 """Configuration settings for Coupon Mention Tracker."""
 
 from functools import lru_cache
+from urllib.parse import quote_plus
 
-from pydantic import Field, PostgresDsn, computed_field
+from pydantic import Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,9 +17,29 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: PostgresDsn = Field(
+    database_user: str = Field(
         ...,
-        description="PostgreSQL connection string",
+        description="PostgreSQL username",
+    )
+    database_password: SecretStr = Field(
+        ...,
+        description="PostgreSQL password",
+    )
+    database_name: str = Field(
+        ...,
+        description="PostgreSQL database name",
+    )
+    database_host: str = Field(
+        default="localhost",
+        description="PostgreSQL host (used for local dev with proxy)",
+    )
+    database_port: int = Field(
+        default=5432,
+        description="PostgreSQL port",
+    )
+    cloud_sql_instance_connection_name: str | None = Field(
+        default=None,
+        description="Cloud SQL instance connection name (e.g., project:region:instance). If set, uses Cloud SQL Connector instead of direct connection.",
     )
 
     # Slack
@@ -57,9 +78,13 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def database_url_str(self) -> str:
-        """Get database URL as string for asyncpg."""
-        return str(self.database_url)
+    def database_dsn(self) -> str:
+        """Construct database DSN for asyncpg (local dev with proxy)."""
+        encoded_password = quote_plus(self.database_password.get_secret_value())
+        return (
+            f"postgresql://{self.database_user}:{encoded_password}@"
+            f"{self.database_host}:{self.database_port}/{self.database_name}"
+        )
 
 
 @lru_cache

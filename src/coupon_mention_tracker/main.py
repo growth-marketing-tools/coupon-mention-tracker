@@ -10,14 +10,68 @@ from coupon_mention_tracker.clients.google_sheets_client import (
 from coupon_mention_tracker.clients.slack_client import SlackNotifier
 from coupon_mention_tracker.core.config import Settings, get_settings
 from coupon_mention_tracker.core.logger import get_logger, setup_logging
+from coupon_mention_tracker.core.models import (
+    AIOverviewPrompt,
+    AIOverviewResult,
+    CouponMatch,
+)
 from coupon_mention_tracker.repositories.ai_overview_repository import (
     AIOverviewRepository,
 )
+from coupon_mention_tracker.repositories.looker_repository import LookerRepository
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 from coupon_mention_tracker.services.report import WeeklyReportGenerator
 
 
 logger = get_logger(__name__)
+
+
+def build_tracking_records(
+    results: list[tuple[AIOverviewPrompt, AIOverviewResult]],
+    matches: list[CouponMatch],
+    matcher: CouponMatcher,
+) -> list[dict]:
+    """Build daily tracking records for Looker from raw results and matches.
+
+    Args:
+        results: List of (prompt, result) pairs from the database.
+        matches: List of coupon matches found during analysis.
+        matcher: Coupon matcher for validation.
+
+    Returns:
+        List of tracking records ready for Looker insertion.
+    """
+    # Index matches by (keyword, location, scraped_date) for quick lookup
+    match_index: dict[tuple, CouponMatch] = {}
+    for match in matches:
+        key = (match.keyword, match.location, match.scraped_date)
+        # Keep first match per keyword/location/date (or could aggregate)
+        if key not in match_index:
+            match_index[key] = match
+
+    records = []
+    for prompt, result in results:
+        key = (prompt.prompt_text, prompt.location, result.scraped_date)
+        match = match_index.get(key)
+
+        records.append(
+            {
+                "keyword": prompt.prompt_text,
+                "location": prompt.location,
+                "primary_product": prompt.primary_product,
+                "has_ai_overview": True,  # We have a result, so AI Overview exists
+                "ai_overview_result_id": result.id,
+                "tracked_coupon_present": match is not None,
+                "detected_coupon_code": match.coupon_code if match else None,
+                "is_valid_coupon": (
+                    matcher.is_valid_coupon(match.coupon_code) if match else None
+                ),
+                "match_context": match.match_context if match else None,
+                "scraped_date": result.scraped_date,
+            }
+        )
+
+    return records
 
 
 def fetch_coupons_from_google_sheets(settings: Settings) -> list[str]:
@@ -51,7 +105,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         if not coupons:
             logger.warning("No coupon codes found; matcher will never match")
 
-        repository = AIOverviewRepository(settings.database_url_str)
+        repository = AIOverviewRepository(settings)
         matcher = CouponMatcher(coupons)
         notifier = SlackNotifier(
             webhook_url=settings.slack_webhook_url,
@@ -64,6 +118,9 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         logger.info("Generating coupon mention report for last %d days", days)
         rows, matches = await generator.generate_report(days=days)
+
+        # Fetch raw results for Looker tracking
+        raw_results = await repository.get_results_last_n_days(days=days)
 
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
@@ -109,6 +166,14 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
             else:
                 logger.error("Failed to send report to Slack")
                 return 1
+
+        # Save tracking data to Looker schema for dashboard
+        logger.info("Saving tracking data to Looker schema...")
+        tracking_records = build_tracking_records(raw_results, matches, matcher)
+        if tracking_records and repository._pool:
+            looker_repo = LookerRepository(repository._pool)
+            saved_count = await looker_repo.save_tracking_batch(tracking_records)
+            logger.info("Saved %d tracking records to Looker", saved_count)
 
         logger.info("Job completed successfully")
         return 0

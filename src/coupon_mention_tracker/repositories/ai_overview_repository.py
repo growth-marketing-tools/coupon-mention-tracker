@@ -7,6 +7,8 @@ from datetime import date, timedelta
 
 import asyncpg
 
+from coupon_mention_tracker.clients import CloudSQLPool, create_db_pool
+from coupon_mention_tracker.core.config import Settings
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
@@ -35,22 +37,18 @@ def _parse_sources(sources: str | list | None) -> list[dict] | None:
 class AIOverviewRepository:
     """Repository for interacting with the AI Overviews database."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, settings: Settings) -> None:
         """Initialize repository.
 
         Args:
-            database_url: PostgreSQL connection string.
+            settings: Application settings.
         """
-        self._database_url = database_url
-        self._pool: asyncpg.Pool | None = None
+        self._settings = settings
+        self._pool: asyncpg.Pool | CloudSQLPool | None = None
 
     async def connect(self) -> None:
         """Establish database connection pool."""
-        self._pool = await asyncpg.create_pool(
-            self._database_url,
-            min_size=1,
-            max_size=10,
-        )
+        self._pool = await create_db_pool(self._settings)
 
     async def disconnect(self) -> None:
         """Close database connection pool."""

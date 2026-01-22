@@ -70,3 +70,26 @@ GET_RESULTS_FOR_PERIOD_QUERY = """
       AND r.response_text IS NOT NULL
     ORDER BY r.scraped_date DESC, p.prompt_text
 """
+
+UPSERT_COUPON_TRACKING_HISTORY = """
+    INSERT INTO looker.coupon_tracking_history (
+        keyword,
+        location,
+        primary_product,
+        has_ai_overview,
+        ai_overview_result_id,
+        tracked_coupon_present,
+        detected_coupon_code,
+        is_valid_coupon,
+        match_context,
+        scraped_date
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    ON CONFLICT (keyword, location, scraped_date)
+    DO UPDATE SET
+        has_ai_overview = EXCLUDED.has_ai_overview,
+        ai_overview_result_id = EXCLUDED.ai_overview_result_id,
+        tracked_coupon_present = EXCLUDED.tracked_coupon_present,
+        detected_coupon_code = EXCLUDED.detected_coupon_code,
+        is_valid_coupon = EXCLUDED.is_valid_coupon,
+        match_context = EXCLUDED.match_context
+"""
