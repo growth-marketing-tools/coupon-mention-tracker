@@ -18,7 +18,9 @@ from coupon_mention_tracker.core.models import (
 from coupon_mention_tracker.repositories.ai_overview_repository import (
     AIOverviewRepository,
 )
-from coupon_mention_tracker.repositories.looker_repository import LookerRepository
+from coupon_mention_tracker.repositories.looker_repository import (
+    LookerRepository,
+)
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 from coupon_mention_tracker.services.report import WeeklyReportGenerator
 
@@ -43,31 +45,56 @@ def build_tracking_records(
     """
     # Index matches by (keyword, location, scraped_date) for quick lookup
     match_index: dict[tuple, CouponMatch] = {}
-    for match in matches:
-        key = (match.keyword, match.location, match.scraped_date)
+    for coupon_match in matches:
+        match_key = (
+            coupon_match.keyword,
+            coupon_match.location,
+            coupon_match.scraped_date,
+        )
         # Keep first match per keyword/location/date (or could aggregate)
-        if key not in match_index:
-            match_index[key] = match
+        if match_key not in match_index:
+            match_index[match_key] = coupon_match
 
     records = []
     for prompt, result in results:
-        key = (prompt.prompt_text, prompt.location, result.scraped_date)
-        match = match_index.get(key)
+        match_key = (prompt.prompt_text, prompt.location, result.scraped_date)
+        coupon_match = match_index.get(match_key)
 
         records.append(
             {
                 "keyword": prompt.prompt_text,
                 "location": prompt.location,
                 "primary_product": prompt.primary_product,
-                "has_ai_overview": True,  # We have a result, so AI Overview exists
+                "has_ai_overview": True,  # AI Overview exists
                 "ai_overview_result_id": result.id,
-                "tracked_coupon_present": match is not None,
-                "detected_coupon_code": match.coupon_code if match else None,
-                "is_valid_coupon": (
-                    matcher.is_valid_coupon(match.coupon_code) if match else None
+                "tracked_coupon_present": coupon_match is not None,
+                "detected_coupon_code": (
+                    coupon_match.coupon_code if coupon_match else None
                 ),
-                "match_context": match.match_context if match else None,
+                "is_valid_coupon": (
+                    matcher.is_valid_coupon(coupon_match.coupon_code)
+                    if coupon_match
+                    else None
+                ),
+                "match_context": (
+                    coupon_match.match_context if coupon_match else None
+                ),
                 "scraped_date": result.scraped_date,
+                "source_mention_count": (
+                    len(coupon_match.source_urls_with_mentions)
+                    if coupon_match
+                    else 0
+                ),
+                "source_urls_with_mentions": (
+                    coupon_match.source_urls_with_mentions
+                    if coupon_match
+                    else []
+                ),
+                "source_mention_unavailable": (
+                    coupon_match.source_mention_unavailable
+                    if coupon_match
+                    else False
+                ),
             }
         )
 
@@ -101,9 +128,12 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
     try:
         coupons = fetch_coupons_from_google_sheets(settings)
-        logger.info("Tracking %d coupon codes", len(coupons))
+        logger.info("[GOOGLE_SHEETS] Tracking %d coupon codes", len(coupons))
         if not coupons:
-            logger.warning("No coupon codes found; matcher will never match")
+            logger.warning(
+                "[GOOGLE_SHEETS] No coupon codes found; "
+                "matcher will never match"
+            )
 
         repository = AIOverviewRepository(settings)
         matcher = CouponMatcher(coupons)
@@ -113,73 +143,90 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         )
         generator = WeeklyReportGenerator(repository, matcher, notifier)
 
-        logger.info("Connecting to database...")
+        logger.info("[DATABASE] Connecting to database...")
         await repository.connect()
 
-        logger.info("Generating coupon mention report for last %d days", days)
-        rows, matches = await generator.generate_report(days=days)
+        tags_filter = ["Dominykas"]
+        logger.info(
+            "[REPORT] Generating coupon mention report for last %d days "
+            "(tags: %s)",
+            days,
+            tags_filter,
+        )
+        rows, matches = await generator.generate_report(
+            days=days, tags=tags_filter
+        )
 
-        # Fetch raw results for Looker tracking
-        raw_results = await repository.get_results_last_n_days(days=days)
+        raw_results = await repository.get_results_last_n_days(
+            days=days, tags=tags_filter
+        )
 
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
-        unique_keywords = {(r.keyword, r.location) for r in rows}
+        unique_keywords = {(row.keyword, row.location) for row in rows}
         keywords_with_overview = {
-            (r.keyword, r.location) for r in rows if r.has_ai_overview
+            (row.keyword, row.location) for row in rows if row.has_ai_overview
         }
         logger.info(
-            "Report generated: %d keywords, %d with AI Overview, %d matches",
+            "[REPORT] Report generated: %d keywords, %d with AI Overview, "
+            "%d matches",
             len(unique_keywords),
             len(keywords_with_overview),
             len(matches),
         )
 
-        with_coupons = [r for r in rows if r.coupon_detected]
+        with_coupons = [row for row in rows if row.coupon_detected]
         invalid_coupons = [
-            r for r in with_coupons if r.is_valid_coupon is False
+            row for row in with_coupons if row.is_valid_coupon is False
         ]
 
         if invalid_coupons:
             logger.warning(
-                "Found %d invalid/outdated coupons in AI Overviews",
+                "[REPORT] Found %d invalid/outdated coupons in AI Overviews",
                 len(invalid_coupons),
             )
             for row in invalid_coupons:
                 logger.warning(
-                    "  - %s in '%s' (%s)",
+                    "[REPORT]  - %s in '%s' (%s)",
                     row.coupon_detected,
                     row.keyword,
                     row.location or "Global",
                 )
 
         if send_slack:
-            logger.info("Sending report to Slack...")
+            logger.info("[SLACK] Sending report to Slack...")
             success = await notifier.send_weekly_report(
                 rows=rows,
                 start_date=start_date,
                 end_date=end_date,
             )
             if success:
-                logger.info("Report sent to Slack successfully")
+                logger.info("[SLACK] Report sent to Slack successfully")
             else:
-                logger.error("Failed to send report to Slack")
+                logger.error(
+                    "[SLACK] Error in send_weekly_report: "
+                    "Failed to send report to Slack"
+                )
                 return 1
 
-        # Save tracking data to Looker schema for dashboard
-        logger.info("Saving tracking data to Looker schema...")
+        logger.info("[LOOKER] Saving tracking data to Looker schema...")
         tracking_records = build_tracking_records(raw_results, matches, matcher)
         if tracking_records and repository._pool:
             looker_repo = LookerRepository(repository._pool)
-            saved_count = await looker_repo.save_tracking_batch(tracking_records)
-            logger.info("Saved %d tracking records to Looker", saved_count)
+            saved_count = await looker_repo.save_tracking_batch(
+                tracking_records
+            )
+            logger.info(
+                "[LOOKER] Saved %d tracking records to Looker",
+                saved_count,
+            )
 
-        logger.info("Job completed successfully")
+        logger.info("[MAIN] Job completed successfully")
         return 0
 
     except Exception:
-        logger.exception("Job failed with error")
+        logger.exception("[MAIN] Job failed with error")
         return 1
 
     finally:
@@ -194,7 +241,7 @@ def main() -> None:
     settings = get_settings()
     days = settings.report_lookback_days
 
-    logger.info("Starting Coupon Mention Tracker job")
+    logger.info("[MAIN] Starting Coupon Mention Tracker job")
 
     exit_code = asyncio.run(run_weekly_report(days=days, send_slack=True))
     sys.exit(exit_code)

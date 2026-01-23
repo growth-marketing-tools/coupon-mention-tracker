@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -20,9 +20,23 @@ class _FakeRepo:
     def __init__(self, results):
         self._results = results
 
-    async def get_results_last_n_days(self, days: int = 7):
+    async def get_results_last_n_days(
+        self,
+        days: int = 7,
+        provider: str = "google_ai_overview",
+        tags: list[str] | None = None,
+    ):
         _ = days
+        _ = provider
+        _ = tags
         return self._results
+
+    async def get_sources_with_html(
+        self, result_ids: list[str | UUID]
+    ) -> dict[str, list[dict]]:
+        _ = result_ids
+        # Return empty dict - no sources with HTML for tests
+        return {}
 
 
 class _FakeNotifier(SlackNotifier):

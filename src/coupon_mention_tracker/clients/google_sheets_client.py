@@ -12,7 +12,7 @@ from coupon_mention_tracker.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+GOOGLE_API_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
 class GoogleSheetsClient:
@@ -33,7 +33,8 @@ class GoogleSheetsClient:
         self._service = self._build_service(credentials_json)
         self._sheet_metadata: dict[str, Any] | None = None
 
-    def _build_service(self, credentials_json: str) -> Any:
+    @staticmethod
+    def _build_service(credentials_json: str) -> Any:
         """Build the Google Sheets API service.
 
         Args:
@@ -45,7 +46,7 @@ class GoogleSheetsClient:
         credentials_info = json.loads(credentials_json)
         credentials = service_account.Credentials.from_service_account_info(
             credentials_info,
-            scopes=SCOPES,
+            scopes=GOOGLE_API_SCOPES,
         )
         return build("sheets", "v4", credentials=credentials)
 
@@ -107,21 +108,22 @@ class GoogleSheetsClient:
         except ValueError:
             return None
 
-    def _column_index_to_letter(self, index: int) -> str:
+    @staticmethod
+    def _column_index_to_letter(column_index: int) -> str:
         """Convert column index to letter notation.
 
         Args:
-            index: Column index (0-based).
+            column_index: Column index (0-based).
 
         Returns:
             Column letter (A, B, ..., Z, AA, AB, etc.).
         """
         result = ""
-        index += 1
-        while index > 0:
-            index -= 1
-            result = chr(index % 26 + ord("A")) + result
-            index //= 26
+        column_index += 1
+        while column_index > 0:
+            column_index -= 1
+            result = chr(column_index % 26 + ord("A")) + result
+            column_index //= 26
         return result
 
     def get_column_values_by_gid_and_name(
@@ -167,8 +169,14 @@ class GoogleSheetsClient:
                 .get(spreadsheetId=self._spreadsheet_id, range=range_notation)
                 .execute()
             )
-        except HttpError as e:
-            logger.error("Failed to fetch column data: %s", e)
+        except HttpError as error:
+            logger.error(
+                "[GOOGLE_SHEETS] Error in get_column_values: "
+                "Failed to fetch values from range %s in spreadsheet %s: %s",
+                range_notation,
+                self._spreadsheet_id,
+                error,
+            )
             raise
 
         rows = result.get("values", [])

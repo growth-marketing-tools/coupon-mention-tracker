@@ -3,6 +3,7 @@
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Protocol
+from uuid import UUID
 
 from coupon_mention_tracker.clients.slack_client import SlackNotifier
 from coupon_mention_tracker.core.models import (
@@ -18,8 +19,15 @@ class _AIOverviewRepositoryLike(Protocol):
     """The minimal repository API needed by WeeklyReportGenerator."""
 
     async def get_results_last_n_days(
-        self, days: int = 7
+        self,
+        days: int = 7,
+        provider: str = "google_ai_overview",
+        tags: list[str] | None = None,
     ) -> list[tuple[AIOverviewPrompt, AIOverviewResult]]: ...
+
+    async def get_sources_with_html(
+        self, result_ids: list[str | UUID]
+    ) -> dict[str, list[dict]]: ...
 
 
 class WeeklyReportGenerator:
@@ -45,16 +53,26 @@ class WeeklyReportGenerator:
     async def generate_report(
         self,
         days: int = 7,
+        tags: list[str] | None = None,
     ) -> tuple[list[WeeklyReportRow], list[CouponMatch]]:
         """Generate weekly report data.
 
         Args:
             days: Number of days to look back.
+            tags: Filter by tags (e.g., ['Dominykas']).
 
         Returns:
             Tuple of (report rows, all coupon matches found).
         """
-        results = await self._repository.get_results_last_n_days(days=days)
+        results = await self._repository.get_results_last_n_days(
+            days=days, tags=tags
+        )
+
+        # Fetch source HTML content for all results
+        result_ids: list[str | UUID] = [result.id for _, result in results]
+        sources_by_result = await self._repository.get_sources_with_html(
+            result_ids
+        )
 
         keyword_data: dict[tuple, dict] = defaultdict(
             lambda: {
@@ -70,15 +88,18 @@ class WeeklyReportGenerator:
         all_matches: list[CouponMatch] = []
 
         for prompt, result in results:
-            key = (prompt.prompt_text, prompt.location)
-            data = keyword_data[key]
+            keyword_key = (prompt.prompt_text, prompt.location)
+            data = keyword_data[keyword_key]
             data["has_ai_overview"] = True
             data["product"] = prompt.primary_product
             data["location"] = prompt.location
 
-            matches = self._matcher.analyze_result(prompt, result)
-            for match in matches:
-                coupon_data = data["coupons"][match.coupon_code]
+            # Get sources for this result
+            sources = sources_by_result.get(str(result.id))
+
+            matches = self._matcher.analyze_result(prompt, result, sources)
+            for coupon_match in matches:
+                coupon_data = data["coupons"][coupon_match.coupon_code]
                 coupon_data["count"] += 1
 
                 if (
@@ -93,7 +114,7 @@ class WeeklyReportGenerator:
                 ):
                     coupon_data["last_seen"] = result.scraped_date
 
-                all_matches.append(match)
+                all_matches.append(coupon_match)
 
         rows: list[WeeklyReportRow] = []
         for (keyword, location), data in keyword_data.items():
@@ -130,26 +151,29 @@ class WeeklyReportGenerator:
                 )
 
         rows.sort(
-            key=lambda r: (
-                r.keyword,
-                r.location or "",
-                r.coupon_detected is None,
-                r.coupon_detected or "",
+            key=lambda row: (
+                row.keyword,
+                row.location or "",
+                row.coupon_detected is None,
+                row.coupon_detected or "",
             )
         )
 
         return rows, all_matches
 
-    async def run_and_send(self, days: int = 7) -> bool:
+    async def run_and_send(
+        self, days: int = 7, tags: list[str] | None = None
+    ) -> bool:
         """Generate and send the weekly report.
 
         Args:
             days: Number of days to look back.
+            tags: Filter by tags (e.g., ['Dominykas']).
 
         Returns:
             True if report was sent successfully.
         """
-        rows, _ = await self.generate_report(days=days)
+        rows, _ = await self.generate_report(days=days, tags=tags)
 
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
@@ -163,16 +187,20 @@ class WeeklyReportGenerator:
     async def get_invalid_coupon_alerts(
         self,
         days: int = 7,
+        tags: list[str] | None = None,
     ) -> list[CouponMatch]:
         """Get matches for coupons not in the valid list.
 
         Args:
             days: Number of days to look back.
+            tags: Filter by tags (e.g., ['Dominykas']).
 
         Returns:
             List of matches with invalid/unknown coupons.
         """
-        results = await self._repository.get_results_last_n_days(days=days)
+        results = await self._repository.get_results_last_n_days(
+            days=days, tags=tags
+        )
         invalid_matches: list[CouponMatch] = []
 
         for prompt, result in results:

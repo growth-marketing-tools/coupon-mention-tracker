@@ -54,19 +54,23 @@ class CouponMatcher:
             patterns[coupon] = pattern
         return patterns
 
-    def _extract_context(self, text: str, start: int, end: int) -> str:
+    @staticmethod
+    def _extract_context(
+        text: str, start: int, end: int, context_chars: int
+    ) -> str:
         """Extract text context around a match.
 
         Args:
             text: Full text content.
             start: Start position of match.
             end: End position of match.
+            context_chars: Number of characters to include around match.
 
         Returns:
             Text snippet with context around the match.
         """
-        context_start = max(0, start - self._context_chars)
-        context_end = min(len(text), end + self._context_chars)
+        context_start = max(0, start - context_chars)
+        context_end = min(len(text), end + context_chars)
 
         prefix = "..." if context_start > 0 else ""
         suffix = "..." if context_end < len(text) else ""
@@ -90,17 +94,18 @@ class CouponMatcher:
 
         matches = []
         for coupon, pattern in self._patterns.items():
-            for match in pattern.finditer(text):
+            for coupon_match in pattern.finditer(text):
                 context = self._extract_context(
                     text,
-                    match.start(),
-                    match.end(),
+                    coupon_match.start(),
+                    coupon_match.end(),
+                    self._context_chars,
                 )
                 matches.append(
                     MatchResult(
                         coupon_code=coupon,
-                        start_pos=match.start(),
-                        end_pos=match.end(),
+                        start_pos=coupon_match.start(),
+                        end_pos=coupon_match.end(),
                         context=context,
                     )
                 )
@@ -129,23 +134,50 @@ class CouponMatcher:
             r"\bpromo[:\s]+[A-Z0-9]+\b",
         ]
 
-        found = set()
-        for pattern in coupon_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            found.update(m.upper() for m in matches)
+        found_coupons = set()
+        for coupon_pattern in coupon_patterns:
+            pattern_matches = re.findall(coupon_pattern, text, re.IGNORECASE)
+            found_coupons.update(match.upper() for match in pattern_matches)
 
-        return list(found)
+        return list(found_coupons)
+
+    def find_in_html_sources(
+        self, sources: list[dict], coupon_code: str
+    ) -> list[str]:
+        """Find which source URLs contain the coupon in their HTML content.
+
+        Args:
+            sources: List of source dicts.
+            coupon_code: The coupon code to search for.
+
+        Returns:
+            List of source URLs where the coupon was found.
+        """
+        urls_with_mention = []
+        pattern = self._patterns.get(coupon_code.upper())
+
+        if not pattern:
+            return urls_with_mention
+
+        for source in sources:
+            html_content = source.get("source_html_content", "")
+            if html_content and pattern.search(html_content):
+                urls_with_mention.append(source["source_url"])
+
+        return urls_with_mention
 
     def analyze_result(
         self,
         prompt: AIOverviewPrompt,
         result: AIOverviewResult,
+        sources_with_html: list[dict] | None = None,
     ) -> list[CouponMatch]:
         """Analyze an AI Overview result for coupon mentions.
 
         Args:
             prompt: The prompt/keyword associated with the result.
             result: The AI Overview result to analyze.
+            sources_with_html: Optional list of source dicts with HTML content.
 
         Returns:
             List of coupon matches found in the result.
@@ -154,19 +186,33 @@ class CouponMatcher:
             return []
 
         matches = self.find_matches(result.response_text)
+        has_sources = (
+            sources_with_html is not None and len(sources_with_html) > 0
+        )
 
-        return [
-            CouponMatch(
-                keyword=prompt.prompt_text,
-                location=prompt.location,
-                product=prompt.primary_product,
-                scraped_date=result.scraped_date,
-                coupon_code=match.coupon_code,
-                match_context=match.context,
-                ai_overview_id=result.id,
+        coupon_matches = []
+        for match in matches:
+            source_urls = []
+            if has_sources and sources_with_html:
+                source_urls = self.find_in_html_sources(
+                    sources_with_html, match.coupon_code
+                )
+
+            coupon_matches.append(
+                CouponMatch(
+                    keyword=prompt.prompt_text,
+                    location=prompt.location,
+                    product=prompt.primary_product,
+                    scraped_date=result.scraped_date,
+                    coupon_code=match.coupon_code,
+                    match_context=match.context,
+                    ai_overview_id=result.id,
+                    source_urls_with_mentions=source_urls,
+                    source_mention_unavailable=not has_sources,
+                )
             )
-            for match in matches
-        ]
+
+        return coupon_matches
 
     @property
     def tracked_coupons(self) -> list[str]:

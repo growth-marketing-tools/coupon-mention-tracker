@@ -113,7 +113,10 @@ class SlackNotifier:
         """Format grouped coupon rows for Slack display."""
         sorted_rows = sorted(
             rows,
-            key=lambda r: (r.keyword.casefold(), (r.location or "").casefold()),
+            key=lambda row: (
+                row.keyword.casefold(),
+                (row.location or "").casefold(),
+            ),
         )
         lines = [f"*`{coupon_code}`*"]
         for row in sorted_rows:
@@ -177,17 +180,19 @@ class SlackNotifier:
 
     def _build_weekly_report_blocks(
         self,
-        rows: list[WeeklyReportRow],
+        report_rows: list[WeeklyReportRow],
         start_date: date,
         end_date: date,
     ) -> list[Block]:
         """Build Slack blocks for weekly report."""
         unique_keywords = {
-            (r.keyword, r.location) for r in rows if r.has_ai_overview
+            (row.keyword, row.location)
+            for row in report_rows
+            if row.has_ai_overview
         }
-        with_coupons = [r for r in rows if r.coupon_detected]
+        with_coupons = [row for row in report_rows if row.coupon_detected]
         invalid_coupons = [
-            r for r in with_coupons if r.is_valid_coupon is False
+            row for row in with_coupons if row.is_valid_coupon is False
         ]
 
         blocks: list[Block] = [
@@ -207,8 +212,7 @@ class SlackNotifier:
                     text=(
                         f"*Summary*\n"
                         f"• Keywords analyzed: {len(unique_keywords)}\n"
-                        f"• Coupon mentions found: {len(with_coupons)}\n"
-                        f"• Untracked coupons: {len(invalid_coupons)}"
+                        f"• Coupon mentions found: {len(with_coupons)}"
                     )
                 )
             ),
@@ -235,16 +239,15 @@ class SlackNotifier:
                 )
 
         if with_coupons:
-            blocks.append(DividerBlock())
+            if invalid_coupons:
+                blocks.append(DividerBlock())
             blocks.append(
                 SectionBlock(
                     text=MarkdownTextObject(text="*Valid coupon mentions*")
                 )
             )
-            valid = [r for r in with_coupons if r.is_valid_coupon is True]
-            for coupon_code, grouped_rows in self._group_rows_by_coupon(
-                valid
-            ):
+            valid = [row for row in with_coupons if row.is_valid_coupon is True]
+            for coupon_code, grouped_rows in self._group_rows_by_coupon(valid):
                 blocks.append(
                     SectionBlock(
                         text=MarkdownTextObject(

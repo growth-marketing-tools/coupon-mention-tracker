@@ -62,6 +62,7 @@ def test_format_coupon_match_block_defaults_location_global() -> None:
 
     block = notifier._format_coupon_match_block(match)
     assert isinstance(block, SectionBlock)
+    assert block.text is not None
     assert "Global" in block.text.text
 
 
@@ -137,7 +138,7 @@ def test_build_weekly_report_blocks_includes_summary_and_invalid() -> None:
     ]
 
     blocks = notifier._build_weekly_report_blocks(
-        rows=rows,
+        report_rows=rows,
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 8),
     )

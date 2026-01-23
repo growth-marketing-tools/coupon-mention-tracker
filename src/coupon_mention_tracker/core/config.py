@@ -1,14 +1,32 @@
 """Configuration settings for Coupon Mention Tracker."""
 
 from functools import lru_cache
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 
-from pydantic import Field, SecretStr, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    @staticmethod
+    def _encode_database_url(url: str) -> str:
+        """URL-encode the password in a database URL if needed."""
+        parsed = urlparse(url)
+        if not parsed.password:
+            return url
+
+        encoded_password = quote_plus(parsed.password)
+        if parsed.port:
+            netloc = (
+                f"{parsed.username}:{encoded_password}@"
+                f"{parsed.hostname}:{parsed.port}"
+            )
+        else:
+            netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
+
+        return f"{parsed.scheme}://{netloc}{parsed.path}"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -17,32 +35,33 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_user: str = Field(
+    database_url: str = Field(
         ...,
-        description="PostgreSQL username",
-    )
-    database_password: SecretStr = Field(
-        ...,
-        description="PostgreSQL password",
-    )
-    database_name: str = Field(
-        ...,
-        description="PostgreSQL database name",
-    )
-    database_host: str = Field(
-        default="localhost",
-        description="PostgreSQL host (used for local dev with proxy)",
-    )
-    database_port: int = Field(
-        default=5432,
-        description="PostgreSQL port",
+        description="PostgreSQL connection URL (e.g., postgresql://user:pass@host:port/db)",
     )
     cloud_sql_instance_connection_name: str | None = Field(
         default=None,
-        description="Cloud SQL instance connection name (e.g., project:region:instance). If set, uses Cloud SQL Connector instead of direct connection.",
+        description=(
+            "Cloud SQL instance connection name "
+            "(e.g., project:region:instance). "
+            "If set, uses Cloud SQL Connector instead of direct connection."
+        ),
     )
 
-    # Slack
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def encode_password_in_url(cls, database_url: str) -> str:
+        """Automatically URL-encode special characters in the password."""
+        if isinstance(database_url, str):
+            return cls._encode_database_url(database_url)
+        return database_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url_str(self) -> str:
+        """Return database URL as string."""
+        return self.database_url
+
     slack_webhook_url: str = Field(
         ...,
         description="Slack webhook URL for sending alerts",
@@ -52,7 +71,6 @@ class Settings(BaseSettings):
         description="Default Slack channel for alerts",
     )
 
-    # Google Sheets
     google_sheets_spreadsheet_id: str = Field(
         default="19gKGRN_FjplOpMUqFtGOrR53htFZR67mUlWrJDWT4UI",
         description="Google Sheets spreadsheet ID for coupon data",
@@ -70,21 +88,10 @@ class Settings(BaseSettings):
         description="Google Workspace service account credentials JSON",
     )
 
-    # Report settings
     report_lookback_days: int = Field(
         default=7,
         description="Number of days to look back for weekly report",
     )
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def database_dsn(self) -> str:
-        """Construct database DSN for asyncpg (local dev with proxy)."""
-        encoded_password = quote_plus(self.database_password.get_secret_value())
-        return (
-            f"postgresql://{self.database_user}:{encoded_password}@"
-            f"{self.database_host}:{self.database_port}/{self.database_name}"
-        )
 
 
 @lru_cache

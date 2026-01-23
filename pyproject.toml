@@ -3,7 +3,7 @@ name = "coupon-mention-tracker"
 version = "0.1.0"
 description = "Monitor coupon mentions in Google AI Overviews with Slack alerts and historical tracking"
 readme = "README.md"
-requires-python = ">=3.12, <3.14"
+requires-python = ">=3.12"
 authors = [
     {name = "Vytautas Bunevičius", email = "vytautas.bunevicius@nordsec.com"}
 ]
@@ -13,6 +13,7 @@ maintainers = [
 keywords = ["coupon", "ai-overviews", "seo", "monitoring", "slack"]
 dependencies = [
     "asyncpg==0.30.0",
+    "sqlalchemy[asyncio]==2.0.36",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.1",
     "httpx==0.28.1",
@@ -32,7 +33,9 @@ build-backend = "hatchling.build"
 packages = ["src/coupon_mention_tracker"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = [
+    "src"
+]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -45,34 +48,35 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = [
-    "E",
-    "W",
-    "F",
-    "I",
-    "B",
-    "C4",
-    "UP",
-    "ARG",
-    "SIM",
-    "PL",
-    "RUF",
-    "TID",
-    "D",
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "PL",     # pylint
+    "RUF",    # ruff-specific rules
+    "TID",    # flake8-tidy-imports (forbid relative imports)
+    "D",      # pydocstyle
+    "S",      # flake8-bandit (security)
 ]
 ignore = [
-    "E501",
-    "D203",
-    "D213",
+    "D203",   # one-blank-line-before-class (conflicts with D211)
+    "D213",   # multi-line-summary-second-line (conflicts with D212)
+    "PLR0913", # too-many-arguments
+    "PLC0415", # import-outside-toplevel
 ]
 fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "PLR2004",
-    "S101",
-    "D100",
-    "D103",
+    "D",       # docstrings not required in tests
+    "PLR2004", # magic-value-comparison
+    "S101",    # assert usage
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -89,8 +93,8 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 
-[tool.ty.environment]
-python-version = "3.12"
+[tool.ty]
+environment = { }
 
 [dependency-groups]
 dev = [

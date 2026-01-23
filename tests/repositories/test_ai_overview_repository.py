@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import cast
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import asyncpg
@@ -47,9 +48,19 @@ class _FakePool:
         self.closed = True
 
 
+def _make_mock_settings(
+    database_url: str = "postgresql://user:pass@localhost/db",
+):
+    """Create a mock Settings object for testing."""
+    settings = MagicMock()
+    settings.database_url_str = database_url
+    settings.cloud_sql_instance_connection_name = None
+    return settings
+
+
 @pytest.mark.asyncio
 async def test_acquire_raises_when_not_connected() -> None:
-    repo = AIOverviewRepository("postgresql://example")
+    repo = AIOverviewRepository(_make_mock_settings())
 
     with pytest.raises(RuntimeError, match="Database not connected"):
         async with repo.acquire():
@@ -60,18 +71,17 @@ async def test_acquire_raises_when_not_connected() -> None:
 async def test_connect_and_disconnect_use_pool(monkeypatch) -> None:
     created = {}
 
-    async def _create_pool(url, min_size, max_size):
-        created["url"] = url
-        created["min_size"] = min_size
-        created["max_size"] = max_size
+    async def _create_db_pool(settings):
+        created["url"] = settings.database_url_str
         return _FakePool(_FakeConn([]))
 
     monkeypatch.setattr(
-        "coupon_mention_tracker.repositories.ai_overview_repository.asyncpg.create_pool",
-        _create_pool,
+        "coupon_mention_tracker.repositories.ai_overview_repository.create_db_pool",
+        _create_db_pool,
     )
 
-    repo = AIOverviewRepository("postgresql://example")
+    settings = _make_mock_settings("postgresql://example")
+    repo = AIOverviewRepository(settings)
     await repo.connect()
     assert created["url"] == "postgresql://example"
 
@@ -98,7 +108,7 @@ async def test_get_prompts_maps_rows_to_models() -> None:
         }
     ]
     conn = _FakeConn(rows)
-    repo = AIOverviewRepository("postgresql://example")
+    repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
     repo._pool = cast(asyncpg.Pool, fake_pool)
 
@@ -135,7 +145,7 @@ async def test_get_results_for_period_maps_rows_to_models() -> None:
     ]
 
     conn = _FakeConn(rows)
-    repo = AIOverviewRepository("postgresql://example")
+    repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
     repo._pool = cast(asyncpg.Pool, fake_pool)
 
@@ -154,14 +164,17 @@ async def test_get_results_for_period_maps_rows_to_models() -> None:
 
 @pytest.mark.asyncio
 async def test_get_results_last_n_days_delegates_to_period(monkeypatch) -> None:
-    repo = AIOverviewRepository("postgresql://example")
+    repo = AIOverviewRepository(_make_mock_settings())
 
     called = {}
 
-    async def _fake_get_results_for_period(start_date, end_date, provider):
+    async def _fake_get_results_for_period(
+        start_date, end_date, provider, tags=None
+    ):
         called["start_date"] = start_date
         called["end_date"] = end_date
         called["provider"] = provider
+        called["tags"] = tags
         return []
 
     monkeypatch.setattr(
@@ -172,3 +185,4 @@ async def test_get_results_last_n_days_delegates_to_period(monkeypatch) -> None:
 
     assert called["provider"] == "google"
     assert called["end_date"] == date.today()
+    assert called["tags"] is None

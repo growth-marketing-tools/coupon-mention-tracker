@@ -3,18 +3,33 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import PostgresDsn
 
 from coupon_mention_tracker.core.config import Settings, get_settings
 
 
 def test_database_url_str_computed_field() -> None:
     settings = Settings(
-        database_url=PostgresDsn("postgresql://user:pass@localhost:5432/db"),
+        database_url="postgresql://user:pass@localhost:5432/db",
         slack_webhook_url="https://example.invalid",
         google_workspace_credentials="{}",
     )
-    assert settings.database_url_str.startswith("postgresql://")
+    assert (
+        settings.database_url_str == "postgresql://user:pass@localhost:5432/db"
+    )
+
+
+def test_database_url_auto_encodes_special_chars() -> None:
+    # Password with special chars: ^h4bj!PXP!kc6K3jE3huQ%&wUG3^ze
+    settings = Settings(
+        database_url="postgresql://user:^pass!word%&@localhost:5432/db",
+        slack_webhook_url="https://example.invalid",
+        google_workspace_credentials="{}",
+    )
+    # Special chars should be URL-encoded
+    assert "%5E" in settings.database_url_str  # ^
+    assert "%21" in settings.database_url_str  # !
+    assert "%25" in settings.database_url_str  # %
+    assert "%26" in settings.database_url_str  # &
 
 
 def test_get_settings_is_cached(monkeypatch) -> None:

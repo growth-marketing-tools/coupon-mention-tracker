@@ -44,6 +44,14 @@ class CouponMatch(BaseModel):
         description="Text snippet showing the coupon in context"
     )
     ai_overview_id: UUID = Field(description="ID of the AI Overview result")
+    source_urls_with_mentions: list[str] = Field(
+        default_factory=list,
+        description="URLs of sources where coupon was found in HTML content",
+    )
+    source_mention_unavailable: bool = Field(
+        default=False,
+        description="True if we could not check sources (no HTML content)",
+    )
 
 
 class WeeklyReportRow(BaseModel):

@@ -83,7 +83,7 @@ Before running locally, ensure you have:
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/user/coupon-mention-tracker.git
+git clone https://github.com/growth-marketing-tools/coupon-mention-tracker.git
 cd coupon-mention-tracker
 
 uv sync
