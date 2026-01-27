@@ -146,7 +146,7 @@ def build_get_sources_for_results_select(result_ids: list[UUID | str]):
 
     query = text(
         """
-        SELECT
+        SELECT DISTINCT ON (source_item->>'url', r.id)
             s.id,
             source_item->>'url' as source_url,
             s.source_domain,
@@ -163,11 +163,11 @@ def build_get_sources_for_results_select(result_ids: list[UUID | str]):
             END
         ) AS source_item
         JOIN marketing_hub.ai_overviews_sources s
-            ON s.source_url = source_item->>'url'
-               OR s.source_url = SPLIT_PART(source_item->>'url', '#', 1)
+            ON s.source_url = SPLIT_PART(source_item->>'url', '#', 1)
         WHERE r.id = ANY(:result_ids)
           AND s.source_html_content IS NOT NULL
           AND s.scrape_status = 'success'
+        ORDER BY source_item->>'url', r.id, s.scraped_at DESC
         """
     ).bindparams(result_ids=result_ids)
 
