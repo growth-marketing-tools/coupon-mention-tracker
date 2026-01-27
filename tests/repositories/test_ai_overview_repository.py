@@ -54,7 +54,6 @@ def _make_mock_settings(
     """Create a mock Settings object for testing."""
     settings = MagicMock()
     settings.database_url_str = database_url
-    settings.cloud_sql_instance_connection_name = None
     return settings
 
 

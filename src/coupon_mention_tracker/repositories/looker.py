@@ -5,7 +5,6 @@ from uuid import UUID
 
 import asyncpg
 
-from coupon_mention_tracker.clients import CloudSQLPool
 from coupon_mention_tracker.core.logger import get_logger
 from coupon_mention_tracker.db.sql_query_builder import (
     build_upsert_tracking_history,
@@ -19,11 +18,11 @@ logger = get_logger(__name__)
 class LookerRepository:
     """Repository for writing to the looker schema for dashboard reporting."""
 
-    def __init__(self, pool: asyncpg.Pool | CloudSQLPool) -> None:
+    def __init__(self, pool: asyncpg.Pool) -> None:
         """Initialize repository with an existing connection pool.
 
         Args:
-            pool: asyncpg connection pool or CloudSQLPool.
+            pool: asyncpg connection pool.
         """
         self._pool = pool
 

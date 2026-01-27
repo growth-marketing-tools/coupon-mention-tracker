@@ -21,14 +21,6 @@ class Settings(BaseSettings):
         ...,
         description="PostgreSQL connection URL (e.g., postgresql://user:pass@host:port/db)",
     )
-    cloud_sql_instance_connection_name: str | None = Field(
-        default=None,
-        description=(
-            "Cloud SQL instance connection name "
-            "(e.g., project:region:instance). "
-            "If set, uses Cloud SQL Connector instead of direct connection."
-        ),
-    )
 
     @field_validator("database_url", mode="before")
     @classmethod

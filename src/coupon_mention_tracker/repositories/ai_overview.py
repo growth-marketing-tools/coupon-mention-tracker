@@ -8,7 +8,7 @@ from uuid import UUID
 
 import asyncpg
 
-from coupon_mention_tracker.clients import CloudSQLPool, create_db_pool
+from coupon_mention_tracker.clients import create_db_pool
 from coupon_mention_tracker.core.config import Settings
 from coupon_mention_tracker.core.logger import get_logger
 from coupon_mention_tracker.core.models import (
@@ -51,7 +51,7 @@ class AIOverviewRepository:
             settings: Application settings.
         """
         self._settings = settings
-        self._pool: asyncpg.Pool | CloudSQLPool | None = None
+        self._pool: asyncpg.Pool | None = None
 
     async def connect(self) -> None:
         """Establish database connection pool."""

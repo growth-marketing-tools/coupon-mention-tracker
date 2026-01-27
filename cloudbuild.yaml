@@ -60,6 +60,11 @@ steps:
       - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE_NAME}:${SHORT_SHA}'
       - '--region=${_REGION}'
       - '--project=${PROJECT_ID}'
+      - '--set-secrets=DATABASE_URL=DATABASE_URL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,GOOGLE_WORKSPACE_CREDENTIALS=GOOGLE_WORKSPACE_CREDENTIALS:latest'
+      - '--max-retries=3'
+      - '--task-timeout=30m'
+      - '--memory=512Mi'
+      - '--cpu=1'
 
 substitutions:
   _SERVICE_NAME: coupon-mention-tracker

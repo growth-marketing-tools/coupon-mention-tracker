@@ -22,7 +22,6 @@ dependencies = [
     "logfire==3.11.0",
     "slack-sdk>=3.27.0",
     "aiohttp>=3.13.3",
-    "cloud-sql-python-connector[asyncpg]>=1.7.0",
 ]
 
 [build-system]

@@ -20,7 +20,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 
 
-# Marketing Hub Schema
 marketing_hub_metadata = MetaData(schema="marketing_hub")
 
 ai_overviews_prompts = Table(
