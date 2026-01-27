@@ -12,14 +12,21 @@ from coupon_mention_tracker.core.models import (
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 
 
-def test_find_matches_word_boundaries_and_case_insensitive() -> None:
+def test_find_matches_word_boundaries_and_case_sensitive() -> None:
+    """Test that matching is case-sensitive and respects word boundaries.
+
+    Case-sensitive matching avoids false positives (e.g., "WIRED" coupon vs
+    "Wired Guard" protocol). Coupon codes are stored uppercase, so only
+    uppercase occurrences in text match.
+    """
     matcher = CouponMatcher(["save10"])
     text = "Use SAVE10 today. Later, save10 again! Not SAVE100."
 
     matches = matcher.find_matches(text)
 
-    assert [m.coupon_code for m in matches] == ["SAVE10", "SAVE10"]
-    assert all("SAVE10" in m.context.upper() for m in matches)
+    # Only matches uppercase "SAVE10", not lowercase "save10" or partial "SAVE100"
+    assert [m.coupon_code for m in matches] == ["SAVE10"]
+    assert "SAVE10" in matches[0].context.upper()
 
 
 def test_find_matches_does_not_match_substrings() -> None:

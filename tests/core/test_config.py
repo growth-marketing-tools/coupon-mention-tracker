@@ -32,6 +32,21 @@ def test_database_url_auto_encodes_special_chars() -> None:
     assert "%26" in settings.database_url_str  # &
 
 
+def test_database_url_handles_already_encoded_passwords() -> None:
+    """Test that already URL-encoded passwords are handled correctly."""
+    # Password already URL-encoded: %5Eh4bj%21PXP%21kc6K3jE3huQ%25%26wUG3%5Eze
+    settings = Settings(
+        database_url="postgresql://user:%5Eh4bj%21PXP@localhost:5432/db",
+        slack_webhook_url="https://example.invalid",
+        google_workspace_credentials="{}",
+    )
+    # Should not double-encode (should decode then re-encode to same result)
+    assert "%5E" in settings.database_url_str  # ^
+    assert "%21" in settings.database_url_str  # !
+    # Should not have double-encoded patterns like %255E
+    assert "%25" not in settings.database_url_str
+
+
 def test_get_settings_is_cached(monkeypatch) -> None:
     get_settings.cache_clear()
 

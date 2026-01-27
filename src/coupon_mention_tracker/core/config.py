@@ -1,32 +1,14 @@
 """Configuration settings for Coupon Mention Tracker."""
 
 from functools import lru_cache
-from urllib.parse import quote_plus, urlparse
 
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-
-    @staticmethod
-    def _encode_database_url(url: str) -> str:
-        """URL-encode the password in a database URL if needed."""
-        parsed = urlparse(url)
-        if not parsed.password:
-            return url
-
-        encoded_password = quote_plus(parsed.password)
-        if parsed.port:
-            netloc = (
-                f"{parsed.username}:{encoded_password}@"
-                f"{parsed.hostname}:{parsed.port}"
-            )
-        else:
-            netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
-
-        return f"{parsed.scheme}://{netloc}{parsed.path}"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -50,10 +32,14 @@ class Settings(BaseSettings):
 
     @field_validator("database_url", mode="before")
     @classmethod
-    def encode_password_in_url(cls, database_url: str) -> str:
-        """Automatically URL-encode special characters in the password."""
+    def normalize_database_url(cls, database_url: str) -> str:
+        """Normalize database URL using SQLAlchemy's URL parser.
+
+        Handles both raw and URL-encoded passwords correctly by parsing
+        and re-encoding using SQLAlchemy's battle-tested implementation.
+        """
         if isinstance(database_url, str):
-            return cls._encode_database_url(database_url)
+            return make_url(database_url).render_as_string(hide_password=False)
         return database_url
 
     @computed_field  # type: ignore[prop-decorator]
