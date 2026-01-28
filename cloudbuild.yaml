@@ -63,7 +63,7 @@ steps:
       - '--network=default'
       - '--subnet=default'
       - '--vpc-egress=private-ranges-only'
-      - '--set-secrets=DATABASE_URL=DATABASE_URL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:3,GOOGLE_WORKSPACE_CREDENTIALS=GOOGLE_WORKSPACE_CREDENTIALS:latest'
+      - '--set-secrets=DATABASE_URL=DATABASE_URL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:2,GOOGLE_WORKSPACE_CREDENTIALS=GOOGLE_WORKSPACE_CREDENTIALS:latest'
       - '--max-retries=3'
       - '--task-timeout=30m'
       - '--memory=512Mi'
