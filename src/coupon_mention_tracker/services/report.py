@@ -68,7 +68,6 @@ class WeeklyReportGenerator:
             days=days, tags=tags
         )
 
-        # Fetch source HTML content for all results
         result_ids: list[str | UUID] = [result.id for _, result in results]
         sources_by_result = await self._repository.get_sources_with_html(
             result_ids
@@ -94,7 +93,6 @@ class WeeklyReportGenerator:
             data["product"] = prompt.primary_product
             data["location"] = prompt.location
 
-            # Get sources for this result
             sources = sources_by_result.get(str(result.id))
 
             matches = self._matcher.analyze_result(prompt, result, sources)

@@ -76,11 +76,9 @@ class AIOverviewRepository:
         Returns:
             List of AI Overview prompts.
         """
-        # 1. Start with base query
         query_parts = [sql_queries.GET_PROMPTS_BASE.strip()]
         params = [status]
 
-        # 2. Append dynamic conditions
         if product:
             params.append(product)
             query_parts.append(f"AND primary_product = ${len(params)}")
@@ -91,12 +89,10 @@ class AIOverviewRepository:
 
         if tags:
             params.append(tags)
-            # Postgres array containment operator
             query_parts.append(f"AND tags @> ${len(params)}")
 
         query_parts.append("ORDER BY created_at DESC")
 
-        # 3. Execute
         final_query = "\n".join(query_parts)
 
         async with DatabasePool.acquire() as conn:
@@ -133,7 +129,6 @@ class AIOverviewRepository:
         Returns:
             List of tuples containing (prompt, result) pairs.
         """
-        # Base query has 3 params: $1, $2, $3
         query_parts = [sql_queries.GET_RESULTS_FOR_PERIOD.strip()]
         params = [start_date, end_date, provider]
 
@@ -166,7 +161,6 @@ class AIOverviewRepository:
                 scraped_date=row["scraped_date"],
                 scraped_at=row["scraped_at"],
                 response_text=row["response_text"],
-                # JSON/JSONB fields are automatically parsed by DatabasePool
                 sources=row["sources"],
                 ahrefs_volume=row["ahrefs_volume"],
                 sentiment_label=row["sentiment_label"],

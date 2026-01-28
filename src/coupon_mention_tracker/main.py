@@ -39,7 +39,6 @@ def build_tracking_records(
     Returns:
         List of tracking records ready for Looker insertion.
     """
-    # Index matches by (keyword, location, scraped_date) for quick lookup
     match_index: dict[tuple, CouponMatch] = {}
     for coupon_match in matches:
         match_key = (
@@ -47,7 +46,6 @@ def build_tracking_records(
             coupon_match.location,
             coupon_match.scraped_date,
         )
-        # Keep first match per keyword/location/date (or could aggregate)
         if match_key not in match_index:
             match_index[match_key] = coupon_match
 
@@ -61,7 +59,7 @@ def build_tracking_records(
                 "keyword": prompt.prompt_text,
                 "location": prompt.location,
                 "primary_product": prompt.primary_product,
-                "has_ai_overview": True,  # AI Overview exists
+                "has_ai_overview": True,
                 "ai_overview_result_id": result.id,
                 "tracked_coupon_present": coupon_match is not None,
                 "detected_coupon_code": (

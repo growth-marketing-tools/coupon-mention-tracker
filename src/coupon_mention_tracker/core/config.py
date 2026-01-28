@@ -16,7 +16,6 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # Database
     database_url: str = Field(
         ...,
         description="PostgreSQL connection URL (e.g., postgresql://user:pass@host:port/db)",

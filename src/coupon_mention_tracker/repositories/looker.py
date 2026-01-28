@@ -100,7 +100,6 @@ class LookerRepository:
         if not records:
             return 0
 
-        # Prepare list of tuples for executemany
         params = [
             (
                 r["keyword"],

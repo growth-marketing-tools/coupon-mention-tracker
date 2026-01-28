@@ -47,8 +47,6 @@ class CouponMatcher:
         patterns = {}
         for coupon in self._coupons:
             escaped = re.escape(coupon)
-            # Case-sensitive matching to avoid false positives
-            # (e.g., "WIRED" coupon vs "Wired Guard" protocol)
             pattern = re.compile(rf"\b{escaped}\b")
             patterns[coupon] = pattern
         return patterns
