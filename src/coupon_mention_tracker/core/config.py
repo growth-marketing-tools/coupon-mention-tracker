@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         username = quote(unquote(parts.username or ""), safe="")
         password = quote(unquote(parts.password or ""), safe="")
         hostname = parts.hostname or ""
-        if ":" in hostname and not hostname.startswith("["):
+        if hostname and ":" in hostname and not hostname.startswith("["):
             hostname = f"[{hostname}]"
         port = f":{parts.port}" if parts.port is not None else ""
         userinfo = username
