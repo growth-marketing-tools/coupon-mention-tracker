@@ -2,7 +2,6 @@
 name = "coupon-mention-tracker"
 version = "0.1.0"
 description = "Monitor coupon mentions in Google AI Overviews using data from the AI Search Visibility Tracker with Slack alerts"
-readme = "README.md"
 requires-python = ">=3.12"
 authors = [
     {name = "Vytautas Bunevičius", email = "vytautas.bunevicius@nordsec.com"}
