@@ -208,8 +208,8 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         logger.info("[LOOKER] Saving tracking data to Looker schema...")
         tracking_records = build_tracking_records(raw_results, matches, matcher)
-        if tracking_records and repository.pool:
-            looker_repo = LookerRepository(repository.pool)
+        if tracking_records:
+            looker_repo = LookerRepository()
             saved_count = await looker_repo.save_tracking_batch(
                 tracking_records
             )

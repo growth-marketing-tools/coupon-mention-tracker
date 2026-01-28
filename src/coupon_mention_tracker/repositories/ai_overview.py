@@ -1,6 +1,5 @@
 """Repository for querying AI Overview data from PostgreSQL."""
 
-import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
@@ -8,19 +7,14 @@ from uuid import UUID
 
 import asyncpg
 
-from coupon_mention_tracker.clients.database import DatabaseClient
+from coupon_mention_tracker.clients.database import DatabasePool
 from coupon_mention_tracker.core.config import Settings
 from coupon_mention_tracker.core.logger import get_logger
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
 )
-from coupon_mention_tracker.db.sql_query_builder import (
-    build_get_prompts_select,
-    build_get_results_for_period_select,
-    build_get_sources_for_results_select,
-    compile_query,
-)
+from coupon_mention_tracker.repositories import sql_queries
 
 
 logger = get_logger(__name__)
@@ -29,21 +23,6 @@ logger = get_logger(__name__)
 class AIOverviewRepository:
     """Repository for interacting with the AI Overviews database."""
 
-    @staticmethod
-    def _parse_sources(sources: str | list | None) -> list[dict] | None:
-        """Parse sources from database JSON string to list of dicts."""
-        if sources is None:
-            return None
-        if isinstance(sources, list):
-            return sources
-        if isinstance(sources, str):
-            try:
-                parsed = json.loads(sources)
-                return parsed if isinstance(parsed, list) else None
-            except json.JSONDecodeError:
-                return None
-        return None
-
     def __init__(self, settings: Settings) -> None:
         """Initialize repository.
 
@@ -51,33 +30,32 @@ class AIOverviewRepository:
             settings: Application settings.
         """
         self._settings = settings
-        self._db_client = DatabaseClient(settings)
 
     @property
     def pool(self) -> asyncpg.Pool | None:
         """Return the active connection pool, if connected."""
-        return self._db_client.pool
+        return DatabasePool._pool
 
     async def connect(self) -> None:
         """Establish database connection pool."""
         logger.info(
             "[DATABASE] Connecting to database for AIOverviewRepository..."
         )
-        await self._db_client.connect()
+        await DatabasePool.connect(self._settings)
 
     async def disconnect(self) -> None:
         """Close database connection pool."""
-        if self._db_client.pool:
+        if DatabasePool._pool:
             logger.info(
                 "[DATABASE] Disconnecting from database for "
                 "AIOverviewRepository..."
             )
-            await self._db_client.disconnect()
+            await DatabasePool.disconnect()
 
     @asynccontextmanager
     async def acquire(self) -> AsyncGenerator[asyncpg.Connection, None]:
         """Acquire a database connection from the pool."""
-        async with self._db_client.acquire() as conn:
+        async with DatabasePool.acquire() as conn:
             yield conn
 
     async def get_prompts(
@@ -98,16 +76,31 @@ class AIOverviewRepository:
         Returns:
             List of AI Overview prompts.
         """
-        select_stmt = build_get_prompts_select(
-            product=product,
-            location=location,
-            status=status,
-            tags=tags,
-        )
-        query, params = compile_query(select_stmt)
+        # 1. Start with base query
+        query_parts = [sql_queries.GET_PROMPTS_BASE.strip()]
+        params = [status]
 
-        async with self.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        # 2. Append dynamic conditions
+        if product:
+            params.append(product)
+            query_parts.append(f"AND primary_product = ${len(params)}")
+
+        if location:
+            params.append(location)
+            query_parts.append(f"AND location = ${len(params)}")
+
+        if tags:
+            params.append(tags)
+            # Postgres array containment operator
+            query_parts.append(f"AND tags @> ${len(params)}")
+
+        query_parts.append("ORDER BY created_at DESC")
+
+        # 3. Execute
+        final_query = "\n".join(query_parts)
+
+        async with DatabasePool.acquire() as conn:
+            rows = await conn.fetch(final_query, *params)
 
         return [
             AIOverviewPrompt(
@@ -140,16 +133,20 @@ class AIOverviewRepository:
         Returns:
             List of tuples containing (prompt, result) pairs.
         """
-        select_stmt = build_get_results_for_period_select(
-            start_date=start_date,
-            end_date=end_date,
-            provider=provider,
-            tags=tags,
-        )
-        query, params = compile_query(select_stmt)
+        # Base query has 3 params: $1, $2, $3
+        query_parts = [sql_queries.GET_RESULTS_FOR_PERIOD.strip()]
+        params = [start_date, end_date, provider]
 
-        async with self.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        if tags:
+            params.append(tags)
+            query_parts.append(f"AND p.tags @> ${len(params)}")
+
+        query_parts.append("ORDER BY r.scraped_date DESC, p.prompt_text")
+
+        final_query = "\n".join(query_parts)
+
+        async with DatabasePool.acquire() as conn:
+            rows = await conn.fetch(final_query, *params)
 
         results = []
         for row in rows:
@@ -169,7 +166,8 @@ class AIOverviewRepository:
                 scraped_date=row["scraped_date"],
                 scraped_at=row["scraped_at"],
                 response_text=row["response_text"],
-                sources=self._parse_sources(row["sources"]),
+                # JSON/JSONB fields are automatically parsed by DatabasePool
+                sources=row["sources"],
                 ahrefs_volume=row["ahrefs_volume"],
                 sentiment_label=row["sentiment_label"],
             )
@@ -215,11 +213,10 @@ class AIOverviewRepository:
         if not result_ids:
             return {}
 
-        select_stmt = build_get_sources_for_results_select(result_ids)
-        query, params = compile_query(select_stmt)
-
-        async with self.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        async with DatabasePool.acquire() as conn:
+            rows = await conn.fetch(
+                sql_queries.GET_SOURCES_FOR_RESULTS, result_ids
+            )
 
         sources_by_result: dict[str, list[dict]] = {}
         for row in rows:

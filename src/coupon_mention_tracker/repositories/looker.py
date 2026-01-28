@@ -3,13 +3,9 @@
 from datetime import date
 from uuid import UUID
 
-import asyncpg
-
+from coupon_mention_tracker.clients.database import DatabasePool
 from coupon_mention_tracker.core.logger import get_logger
-from coupon_mention_tracker.db.sql_query_builder import (
-    build_upsert_tracking_history,
-    compile_query,
-)
+from coupon_mention_tracker.repositories import sql_queries
 
 
 logger = get_logger(__name__)
@@ -18,13 +14,9 @@ logger = get_logger(__name__)
 class LookerRepository:
     """Repository for writing to the looker schema for dashboard reporting."""
 
-    def __init__(self, pool: asyncpg.Pool) -> None:
-        """Initialize repository with an existing connection pool.
-
-        Args:
-            pool: asyncpg connection pool.
-        """
-        self._pool = pool
+    def __init__(self) -> None:
+        """Initialize repository."""
+        pass
 
     async def save_tracking_record(
         self,
@@ -61,25 +53,24 @@ class LookerRepository:
             source_urls_with_mentions: URLs where coupon was found.
             source_mention_unavailable: True if we could not check sources.
         """
-        insert_stmt = build_upsert_tracking_history(
-            keyword=keyword,
-            scraped_date=scraped_date,
-            has_ai_overview=has_ai_overview,
-            location=location,
-            primary_product=primary_product,
-            ai_overview_result_id=ai_overview_result_id,
-            tracked_coupon_present=tracked_coupon_present,
-            detected_coupon_code=detected_coupon_code,
-            is_valid_coupon=is_valid_coupon,
-            match_context=match_context,
-            source_mention_count=source_mention_count,
-            source_urls_with_mentions=source_urls_with_mentions,
-            source_mention_unavailable=source_mention_unavailable,
+        params = (
+            keyword,
+            location,
+            primary_product,
+            has_ai_overview,
+            ai_overview_result_id,
+            tracked_coupon_present,
+            detected_coupon_code,
+            is_valid_coupon,
+            match_context,
+            scraped_date,
+            source_mention_count,
+            source_urls_with_mentions or [],
+            source_mention_unavailable,
         )
-        query, params = compile_query(insert_stmt)
 
-        async with self._pool.acquire() as conn:
-            await conn.execute(query, *params)
+        async with DatabasePool.acquire() as conn:
+            await conn.execute(sql_queries.UPSERT_TRACKING_HISTORY, *params)
 
     async def save_tracking_batch(
         self,
@@ -109,34 +100,28 @@ class LookerRepository:
         if not records:
             return 0
 
-        # Build a single upsert query (we'll use it for batch operations)
-        # For batch, we need to execute each separately since SQLAlchemy
-        # doesn't support batched upserts easily
-        async with self._pool.acquire() as conn:
-            for record in records:
-                insert_stmt = build_upsert_tracking_history(
-                    keyword=record["keyword"],
-                    scraped_date=record["scraped_date"],
-                    has_ai_overview=record["has_ai_overview"],
-                    location=record.get("location"),
-                    primary_product=record.get("primary_product"),
-                    ai_overview_result_id=record.get("ai_overview_result_id"),
-                    tracked_coupon_present=record.get(
-                        "tracked_coupon_present", False
-                    ),
-                    detected_coupon_code=record.get("detected_coupon_code"),
-                    is_valid_coupon=record.get("is_valid_coupon"),
-                    match_context=record.get("match_context"),
-                    source_mention_count=record.get("source_mention_count", 0),
-                    source_urls_with_mentions=record.get(
-                        "source_urls_with_mentions"
-                    ),
-                    source_mention_unavailable=record.get(
-                        "source_mention_unavailable", False
-                    ),
-                )
-                query, params = compile_query(insert_stmt)
-                await conn.execute(query, *params)
+        # Prepare list of tuples for executemany
+        params = [
+            (
+                r["keyword"],
+                r.get("location"),
+                r.get("primary_product"),
+                r["has_ai_overview"],
+                r.get("ai_overview_result_id"),
+                r.get("tracked_coupon_present", False),
+                r.get("detected_coupon_code"),
+                r.get("is_valid_coupon"),
+                r.get("match_context"),
+                r["scraped_date"],
+                r.get("source_mention_count", 0),
+                r.get("source_urls_with_mentions") or [],
+                r.get("source_mention_unavailable", False),
+            )
+            for r in records
+        ]
+
+        async with DatabasePool.acquire() as conn:
+            await conn.executemany(sql_queries.UPSERT_TRACKING_HISTORY, params)
 
         logger.info(
             "[LOOKER] Saved %d tracking records to looker schema", len(records)

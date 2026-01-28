@@ -1,10 +1,10 @@
 """Configuration settings for Coupon Mention Tracker."""
 
 from functools import lru_cache
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -25,20 +25,30 @@ class Settings(BaseSettings):
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, database_url: str) -> str:
-        """Normalize database URL using SQLAlchemy's URL parser.
-
-        Handles both raw and URL-encoded passwords correctly by parsing
-        and re-encoding using SQLAlchemy's battle-tested implementation.
-        """
-        if isinstance(database_url, str):
-            return make_url(database_url).render_as_string(hide_password=False)
-        return database_url
+        """Ensure database URL is a string."""
+        return str(database_url)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url_str(self) -> str:
-        """Return database URL as string."""
-        return self.database_url
+        """Return database URL with user credentials URL-encoded."""
+        parts = urlsplit(self.database_url)
+        if parts.username is None and parts.password is None:
+            return self.database_url
+
+        username = quote(parts.username or "", safe="")
+        password = quote(parts.password or "", safe="")
+        hostname = parts.hostname or ""
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+        port = f":{parts.port}" if parts.port is not None else ""
+        userinfo = username
+        if parts.password is not None:
+            userinfo = f"{username}:{password}"
+        netloc = f"{userinfo}@{hostname}{port}"
+        return urlunsplit(
+            (parts.scheme, netloc, parts.path, parts.query, parts.fragment)
+        )
 
     slack_webhook_url: str = Field(
         ...,

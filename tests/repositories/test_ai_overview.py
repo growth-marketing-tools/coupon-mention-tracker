@@ -10,6 +10,7 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
+from coupon_mention_tracker.clients.database import DatabasePool
 from coupon_mention_tracker.repositories.ai_overview import (
     AIOverviewRepository,
 )
@@ -57,40 +58,46 @@ def _make_mock_settings(
     return settings
 
 
+@pytest.fixture(autouse=True)
+def mock_db_pool():
+    """Reset DatabasePool before and after tests."""
+    old_pool = DatabasePool._pool
+    DatabasePool._pool = None
+    yield
+    DatabasePool._pool = old_pool
+
+
 @pytest.mark.asyncio
 async def test_acquire_raises_when_not_connected() -> None:
     repo = AIOverviewRepository(_make_mock_settings())
 
-    with pytest.raises(RuntimeError, match="Database not connected"):
+    with pytest.raises(RuntimeError, match="Database pool not initialized"):
         async with repo.acquire():
             pass
 
 
 @pytest.mark.asyncio
 async def test_connect_and_disconnect_use_pool(monkeypatch) -> None:
-    created = {}
+    fake_pool = MagicMock()
 
-    async def _connect(self):
-        created["url"] = self._settings.database_url_str
-        self._pool = _FakePool(_FakeConn([]))
-        return self._pool
+    async def _close():
+        pass
 
-    monkeypatch.setattr(
-        "coupon_mention_tracker.clients.database.DatabaseClient.connect",
-        _connect,
-    )
+    fake_pool.close = _close
+
+    async def _create_pool(*_args, **_kwargs):
+        return fake_pool
+
+    monkeypatch.setattr("asyncpg.create_pool", _create_pool)
 
     settings = _make_mock_settings("postgresql://example")
     repo = AIOverviewRepository(settings)
-    await repo.connect()
-    assert created["url"] == "postgresql://example"
 
-    pool = cast(_FakePool, repo.pool)
-    assert pool is not None
+    await repo.connect()
+    assert DatabasePool._pool is fake_pool
 
     await repo.disconnect()
-    assert pool.closed is True
-    assert repo.pool is None
+    assert DatabasePool._pool is None
 
 
 @pytest.mark.asyncio
@@ -108,15 +115,20 @@ async def test_get_prompts_maps_rows_to_models() -> None:
         }
     ]
     conn = _FakeConn(rows)
-    repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
-    repo._db_client._pool = cast(asyncpg.Pool, fake_pool)
+    DatabasePool._pool = cast(asyncpg.Pool, fake_pool)
 
+    repo = AIOverviewRepository(_make_mock_settings())
     prompts = await repo.get_prompts(product="nordvpn", location="US")
 
     assert len(prompts) == 1
     assert prompts[0].prompt_text == "nordvpn coupon"
     assert conn.calls
+
+    # Check query content briefly
+    query, _params = conn.calls[0]
+    assert "SELECT id, prompt_text" in query
+    assert "WHERE status = $1" in query
 
 
 @pytest.mark.asyncio
@@ -145,10 +157,10 @@ async def test_get_results_for_period_maps_rows_to_models() -> None:
     ]
 
     conn = _FakeConn(rows)
-    repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
-    repo._db_client._pool = cast(asyncpg.Pool, fake_pool)
+    DatabasePool._pool = cast(asyncpg.Pool, fake_pool)
 
+    repo = AIOverviewRepository(_make_mock_settings())
     results = await repo.get_results_for_period(
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 7),

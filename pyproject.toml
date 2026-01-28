@@ -13,7 +13,6 @@ maintainers = [
 keywords = ["coupon", "ai-overviews", "seo", "monitoring", "slack"]
 dependencies = [
     "asyncpg==0.30.0",
-    "sqlalchemy[asyncio]==2.0.36",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.1",
     "httpx==0.28.1",
