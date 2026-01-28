@@ -27,7 +27,7 @@ class Settings(BaseSettings):
         """Ensure database URL is a string."""
         return str(database_url)
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def database_url_str(self) -> str:
         """Return database URL with user credentials URL-encoded."""

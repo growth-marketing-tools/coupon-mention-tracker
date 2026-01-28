@@ -62,7 +62,7 @@ class GoogleSheetsClient:
                 .get(spreadsheetId=self._spreadsheet_id)
                 .execute()
             )
-        return self._sheet_metadata  # type: ignore[return-value]
+        return self._sheet_metadata
 
     def _get_sheet_title_by_gid(self, gid: int) -> str | None:
         """Get sheet title by GID.

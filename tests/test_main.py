@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from coupon_mention_tracker import main
+from coupon_mention_tracker.core.config import Settings
 
 
 def test_fetch_coupons_from_google_sheets_uses_settings(monkeypatch) -> None:
@@ -24,16 +25,14 @@ def test_fetch_coupons_from_google_sheets_uses_settings(monkeypatch) -> None:
 
     monkeypatch.setattr(main, "GoogleSheetsClient", _Client)
 
-    settings = type(
-        "S",
-        (),
-        {
-            "google_sheets_spreadsheet_id": "sheet",
-            "google_workspace_credentials": "{}",
-            "google_sheets_coupon_gid": 123,
-            "google_sheets_coupon_column": "Coupon",
-        },
-    )()
+    settings = Settings(
+        database_url="postgresql://test:test@localhost:5432/test",
+        slack_webhook_url="https://hooks.slack.com/test",
+        google_sheets_spreadsheet_id="sheet",
+        google_workspace_credentials="{}",
+        google_sheets_coupon_gid=123,
+        google_sheets_coupon_column="Coupon",
+    )
 
     coupons = main.fetch_coupons_from_google_sheets(settings)
 
