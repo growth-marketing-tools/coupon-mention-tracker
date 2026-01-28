@@ -54,7 +54,7 @@ class Settings(BaseSettings):
         description="Slack webhook URL for sending alerts",
     )
     slack_channel: str = Field(
-        default="#growth-marketing-alerts",
+        default="#gmt-kwd-bot",
         description="Default Slack channel for alerts",
     )
 
