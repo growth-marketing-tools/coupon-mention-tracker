@@ -1,4 +1,4 @@
-"""Unit tests for SlackNotifier without sending network requests."""
+"""Unit tests for SlackClient without sending network requests."""
 
 from __future__ import annotations
 
@@ -9,10 +9,7 @@ from uuid import uuid4
 import pytest
 from slack_sdk.models.blocks import HeaderBlock, SectionBlock
 
-from coupon_mention_tracker.clients.slack_client import (
-    MAX_DISPLAY_ITEMS,
-    SlackNotifier,
-)
+from coupon_mention_tracker.clients.slack import MAX_DISPLAY_ITEMS, SlackClient
 from coupon_mention_tracker.core.models import CouponMatch, WeeklyReportRow
 
 
@@ -34,11 +31,11 @@ async def test_send_message_posts_payload(monkeypatch) -> None:
             return _Response(HTTPStatus.OK, "ok")
 
     monkeypatch.setattr(
-        "coupon_mention_tracker.clients.slack_client.AsyncWebhookClient",
+        "coupon_mention_tracker.clients.slack.AsyncWebhookClient",
         _MockClient,
     )
 
-    notifier = SlackNotifier(webhook_url="https://example.invalid")
+    notifier = SlackClient(webhook_url="https://example.invalid")
     ok = await notifier.send_message("hello", blocks=[{"type": "divider"}])
 
     assert ok is True
@@ -49,7 +46,7 @@ async def test_send_message_posts_payload(monkeypatch) -> None:
 
 
 def test_format_coupon_match_block_defaults_location_global() -> None:
-    notifier = SlackNotifier(webhook_url="https://example.invalid")
+    notifier = SlackClient(webhook_url="https://example.invalid")
     match = CouponMatch(
         keyword="k",
         location=None,
@@ -68,7 +65,7 @@ def test_format_coupon_match_block_defaults_location_global() -> None:
 
 @pytest.mark.asyncio
 async def test_send_coupon_alert_empty_is_noop() -> None:
-    notifier = SlackNotifier(webhook_url="https://example.invalid")
+    notifier = SlackClient(webhook_url="https://example.invalid")
     assert await notifier.send_coupon_alert([]) is True
 
 
@@ -83,7 +80,7 @@ async def test_send_coupon_alert_truncates_and_adds_remaining(
         captured["blocks"] = blocks
         return True
 
-    notifier = SlackNotifier(webhook_url="https://example.invalid")
+    notifier = SlackClient(webhook_url="https://example.invalid")
     monkeypatch.setattr(notifier, "send_message", _send_message)
 
     matches = [
@@ -111,7 +108,7 @@ async def test_send_coupon_alert_truncates_and_adds_remaining(
 
 
 def test_build_weekly_report_blocks_includes_summary_and_invalid() -> None:
-    notifier = SlackNotifier(webhook_url="https://example.invalid")
+    notifier = SlackClient(webhook_url="https://example.invalid")
     rows = [
         WeeklyReportRow(
             keyword="k1",

@@ -6,9 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from coupon_mention_tracker.clients.google_sheets_client import (
-    GoogleSheetsClient,
-)
+from coupon_mention_tracker.clients.google_sheets import GoogleSheetsClient
 
 
 def _make_client_with_service(service) -> GoogleSheetsClient:

@@ -4,10 +4,8 @@ import asyncio
 import sys
 from datetime import date, timedelta
 
-from coupon_mention_tracker.clients.google_sheets_client import (
-    GoogleSheetsClient,
-)
-from coupon_mention_tracker.clients.slack_client import SlackNotifier
+from coupon_mention_tracker.clients.google_sheets import GoogleSheetsClient
+from coupon_mention_tracker.clients.slack import SlackClient
 from coupon_mention_tracker.core.config import Settings, get_settings
 from coupon_mention_tracker.core.logger import get_logger, setup_logging
 from coupon_mention_tracker.core.models import (
@@ -15,12 +13,10 @@ from coupon_mention_tracker.core.models import (
     AIOverviewResult,
     CouponMatch,
 )
-from coupon_mention_tracker.repositories.ai_overview_repository import (
+from coupon_mention_tracker.repositories.ai_overview import (
     AIOverviewRepository,
 )
-from coupon_mention_tracker.repositories.looker_repository import (
-    LookerRepository,
-)
+from coupon_mention_tracker.repositories.looker import LookerRepository
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 from coupon_mention_tracker.services.report import WeeklyReportGenerator
 
@@ -137,7 +133,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         repository = AIOverviewRepository(settings)
         matcher = CouponMatcher(coupons)
-        notifier = SlackNotifier(
+        notifier = SlackClient(
             webhook_url=settings.slack_webhook_url,
             default_channel=settings.slack_channel,
         )
@@ -212,8 +208,8 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         logger.info("[LOOKER] Saving tracking data to Looker schema...")
         tracking_records = build_tracking_records(raw_results, matches, matcher)
-        if tracking_records and repository._pool:
-            looker_repo = LookerRepository(repository._pool)
+        if tracking_records and repository.pool:
+            looker_repo = LookerRepository(repository.pool)
             saved_count = await looker_repo.save_tracking_batch(
                 tracking_records
             )

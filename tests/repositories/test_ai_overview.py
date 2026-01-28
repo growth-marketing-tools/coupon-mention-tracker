@@ -10,7 +10,7 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
-from coupon_mention_tracker.repositories.ai_overview_repository import (
+from coupon_mention_tracker.repositories.ai_overview import (
     AIOverviewRepository,
 )
 
@@ -70,13 +70,14 @@ async def test_acquire_raises_when_not_connected() -> None:
 async def test_connect_and_disconnect_use_pool(monkeypatch) -> None:
     created = {}
 
-    async def _create_db_pool(settings):
-        created["url"] = settings.database_url_str
-        return _FakePool(_FakeConn([]))
+    async def _connect(self):
+        created["url"] = self._settings.database_url_str
+        self._pool = _FakePool(_FakeConn([]))
+        return self._pool
 
     monkeypatch.setattr(
-        "coupon_mention_tracker.repositories.ai_overview_repository.create_db_pool",
-        _create_db_pool,
+        "coupon_mention_tracker.clients.database.DatabaseClient.connect",
+        _connect,
     )
 
     settings = _make_mock_settings("postgresql://example")
@@ -84,12 +85,12 @@ async def test_connect_and_disconnect_use_pool(monkeypatch) -> None:
     await repo.connect()
     assert created["url"] == "postgresql://example"
 
-    pool = cast(_FakePool, repo._pool)
+    pool = cast(_FakePool, repo.pool)
     assert pool is not None
 
     await repo.disconnect()
     assert pool.closed is True
-    assert repo._pool is None
+    assert repo.pool is None
 
 
 @pytest.mark.asyncio
@@ -109,7 +110,7 @@ async def test_get_prompts_maps_rows_to_models() -> None:
     conn = _FakeConn(rows)
     repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
-    repo._pool = cast(asyncpg.Pool, fake_pool)
+    repo._db_client._pool = cast(asyncpg.Pool, fake_pool)
 
     prompts = await repo.get_prompts(product="nordvpn", location="US")
 
@@ -146,7 +147,7 @@ async def test_get_results_for_period_maps_rows_to_models() -> None:
     conn = _FakeConn(rows)
     repo = AIOverviewRepository(_make_mock_settings())
     fake_pool = _FakePool(conn)
-    repo._pool = cast(asyncpg.Pool, fake_pool)
+    repo._db_client._pool = cast(asyncpg.Pool, fake_pool)
 
     results = await repo.get_results_for_period(
         start_date=date(2026, 1, 1),

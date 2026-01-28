@@ -8,7 +8,7 @@ from uuid import UUID
 
 import asyncpg
 
-from coupon_mention_tracker.clients import create_db_pool
+from coupon_mention_tracker.clients.database import DatabaseClient
 from coupon_mention_tracker.core.config import Settings
 from coupon_mention_tracker.core.logger import get_logger
 from coupon_mention_tracker.core.models import (
@@ -51,31 +51,33 @@ class AIOverviewRepository:
             settings: Application settings.
         """
         self._settings = settings
-        self._pool: asyncpg.Pool | None = None
+        self._db_client = DatabaseClient(settings)
+
+    @property
+    def pool(self) -> asyncpg.Pool | None:
+        """Return the active connection pool, if connected."""
+        return self._db_client.pool
 
     async def connect(self) -> None:
         """Establish database connection pool."""
         logger.info(
             "[DATABASE] Connecting to database for AIOverviewRepository..."
         )
-        self._pool = await create_db_pool(self._settings)
+        await self._db_client.connect()
 
     async def disconnect(self) -> None:
         """Close database connection pool."""
-        if self._pool:
+        if self._db_client.pool:
             logger.info(
                 "[DATABASE] Disconnecting from database for "
                 "AIOverviewRepository..."
             )
-            await self._pool.close()
-            self._pool = None
+            await self._db_client.disconnect()
 
     @asynccontextmanager
     async def acquire(self) -> AsyncGenerator[asyncpg.Connection, None]:
         """Acquire a database connection from the pool."""
-        if not self._pool:
-            raise RuntimeError("Database not connected. Call connect() first.")
-        async with self._pool.acquire() as conn:
+        async with self._db_client.acquire() as conn:
             yield conn
 
     async def get_prompts(

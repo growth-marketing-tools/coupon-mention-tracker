@@ -21,7 +21,7 @@ from coupon_mention_tracker.core.models import CouponMatch, WeeklyReportRow
 MAX_DISPLAY_ITEMS = 10
 
 
-class SlackNotifier:
+class SlackClient:
     """Service for sending Slack notifications about coupon mentions."""
 
     def __init__(
@@ -121,7 +121,7 @@ class SlackNotifier:
         lines = [f"*`{coupon_code}`*"]
         for row in sorted_rows:
             location = row.location or "Global"
-            date_range = SlackNotifier._format_date_range(
+            date_range = SlackClient._format_date_range(
                 row.first_seen, row.last_seen
             )
             date_suffix = f" {date_range}" if date_range else ""

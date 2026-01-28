@@ -24,7 +24,8 @@ def test_find_matches_word_boundaries_and_case_sensitive() -> None:
 
     matches = matcher.find_matches(text)
 
-    # Only matches uppercase "SAVE10", not lowercase "save10" or partial "SAVE100"
+    # Only matches uppercase "SAVE10", not lowercase "save10" or partial
+    # "SAVE100".
     assert [m.coupon_code for m in matches] == ["SAVE10"]
     assert "SAVE10" in matches[0].context.upper()
 

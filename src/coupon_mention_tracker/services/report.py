@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Protocol
 from uuid import UUID
 
-from coupon_mention_tracker.clients.slack_client import SlackNotifier
+from coupon_mention_tracker.clients.slack import SlackClient
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
@@ -37,7 +37,7 @@ class WeeklyReportGenerator:
         self,
         repository: _AIOverviewRepositoryLike,
         matcher: CouponMatcher,
-        notifier: SlackNotifier,
+        notifier: SlackClient,
     ) -> None:
         """Initialize report generator.
 

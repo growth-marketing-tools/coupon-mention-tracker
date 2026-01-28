@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from coupon_mention_tracker.clients.slack_client import SlackNotifier
+from coupon_mention_tracker.clients.slack import SlackClient
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
@@ -39,7 +39,7 @@ class _FakeRepo:
         return {}
 
 
-class _FakeNotifier(SlackNotifier):
+class _FakeNotifier(SlackClient):
     def __init__(self) -> None:
         super().__init__(webhook_url="https://example.invalid")
         self.sent = []
