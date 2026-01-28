@@ -69,7 +69,7 @@ steps:
 substitutions:
   _SERVICE_NAME: coupon-mention-tracker
   _REGION: europe-west3
-  _REPOSITORY: cloud-run-jobs
+  _REPOSITORY: containers
 
 options:
   logging: CLOUD_LOGGING_ONLY
