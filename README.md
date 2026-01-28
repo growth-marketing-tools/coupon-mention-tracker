@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Coupon Mention Tracker** monitors coupon code mentions in Google AI Overviews across targeted keywords. It leverages existing AI monitoring infrastructure to detect when coupons appear in search results, sends weekly Slack reports, and enables historical correlation analysis with revenue data in Looker.
+The **Coupon Mention Tracker** monitors coupon code mentions in Google AI Overviews across targeted keywords. It builds upon the **AI Search Visibility Tracker** by analyzing its collected search data to detect coupons, check for validity, and send weekly Slack reports.
 
 ## Table of Contents
 

@@ -1,7 +1,7 @@
 [project]
 name = "coupon-mention-tracker"
 version = "0.1.0"
-description = "Monitor coupon mentions in Google AI Overviews with Slack alerts and historical tracking"
+description = "Monitor coupon mentions in Google AI Overviews using data from the AI Search Visibility Tracker with Slack alerts"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -12,13 +12,13 @@ maintainers = [
 ]
 keywords = ["coupon", "ai-overviews", "seo", "monitoring", "slack"]
 dependencies = [
-    "asyncpg==0.30.0",
-    "pydantic==2.10.4",
-    "pydantic-settings==2.7.1",
+    "asyncpg==0.31.0",
+    "pydantic==2.10.6",
+    "pydantic-settings==2.8.0",
     "httpx==0.28.1",
-    "google-api-python-client==2.157.0",
-    "google-auth==2.37.0",
-    "logfire==3.11.0",
+    "google-api-python-client>=2.188.0",
+    "google-auth>=2.48.0",
+    "logfire>=4.20.0",
     "slack-sdk>=3.27.0",
     "aiohttp>=3.13.3",
 ]

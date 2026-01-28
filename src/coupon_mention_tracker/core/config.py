@@ -1,7 +1,7 @@
 """Configuration settings for Coupon Mention Tracker."""
 
 from functools import lru_cache
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
         if parts.username is None and parts.password is None:
             return self.database_url
 
-        username = quote(parts.username or "", safe="")
-        password = quote(parts.password or "", safe="")
+        username = quote(unquote(parts.username or ""), safe="")
+        password = quote(unquote(parts.password or ""), safe="")
         hostname = parts.hostname or ""
         if ":" in hostname and not hostname.startswith("["):
             hostname = f"[{hostname}]"
