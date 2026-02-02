@@ -1,9 +1,11 @@
 """Data models for coupon mentions and AI Overview tracking."""
 
+import json
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AIOverviewPrompt(BaseModel):
@@ -30,6 +32,20 @@ class AIOverviewResult(BaseModel):
     sources: list[dict] | None = None
     ahrefs_volume: int | None = None
     sentiment_label: str | None = None
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def parse_sources(cls, value: Any) -> list[dict] | None:
+        """Parse sources from string if needed."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                return parsed if isinstance(parsed, list) else None
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return value
 
 
 class CouponMatch(BaseModel):
