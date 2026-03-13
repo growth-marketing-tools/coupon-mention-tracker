@@ -17,7 +17,6 @@ from coupon_mention_tracker.core.models import (
 from coupon_mention_tracker.repositories import sql_queries
 
 
-
 class AIOverviewRepository:
     """Repository for interacting with the AI Overviews database."""
 

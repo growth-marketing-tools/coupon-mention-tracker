@@ -3,9 +3,9 @@
 from datetime import date
 from uuid import UUID
 
-from coupon_mention_tracker.clients.database import DatabasePool
 from loguru import logger
 
+from coupon_mention_tracker.clients.database import DatabasePool
 from coupon_mention_tracker.repositories import sql_queries
 
 

@@ -18,23 +18,16 @@ _HTTP_UNAUTHORIZED = 401
 # NordSec explore (NordVPN, NordPass, NordLocker, NordProtect)
 _NORDSEC_MODEL = "tesonet"
 _NORDSEC_VIEW = "prod_core_nordsec"
-_NORDSEC_COUPON = (
-    "prod_core__orders_data_nordsec.coupon_code"
-)
+_NORDSEC_COUPON = "prod_core__orders_data_nordsec.coupon_code"
 _NORDSEC_REVENUE = (
-    "prod_core__fct_payments_nordsec"
-    ".total_nordsec_order_billings_in_usd"
+    "prod_core__fct_payments_nordsec.total_nordsec_order_billings_in_usd"
 )
 _NORDSEC_TRANSACTIONS = (
-    "prod_core__fct_payments_nordsec"
-    ".count_nordsec_transactions"
+    "prod_core__fct_payments_nordsec.count_nordsec_transactions"
 )
-_NORDSEC_DATE = (
-    "prod_core__fct_payments_nordsec.payment_created_date"
-)
+_NORDSEC_DATE = "prod_core__fct_payments_nordsec.payment_created_date"
 _NORDSEC_FIRST_RECURRING = (
-    "prod_core__products_data_nordsec"
-    ".product_first_or_recurring"
+    "prod_core__products_data_nordsec.product_first_or_recurring"
 )
 
 # Saily explore
@@ -42,13 +35,9 @@ _SAILY_MODEL = "tesonet"
 _SAILY_VIEW = "prod_core_esim"
 _SAILY_COUPON = "prod_core_esim.order_coupon_code"
 _SAILY_REVENUE = "prod_core_esim.total_billings_in_usd"
-_SAILY_TRANSACTIONS = (
-    "prod_core_esim.number_of_transactions"
-)
+_SAILY_TRANSACTIONS = "prod_core_esim.number_of_transactions"
 _SAILY_DATE = "prod_core_esim.payment_created_date"
-_SAILY_FIRST_RECURRING = (
-    "prod_core_esim.first_or_recurring_with_refunds"
-)
+_SAILY_FIRST_RECURRING = "prod_core_esim.first_or_recurring_with_refunds"
 
 
 class LookerClient:
@@ -128,9 +117,7 @@ class LookerClient:
         if resp.status_code == _HTTP_UNAUTHORIZED:
             logger.info("[LOOKER] Token expired, re-authenticating")
             await self._authenticate()
-            headers = {
-                "Authorization": f"token {self._token}"
-            }
+            headers = {"Authorization": f"token {self._token}"}
             resp = await self._http.post(
                 f"{self._base_url}{_QUERY_RUN_PATH}",
                 json=body,
@@ -199,9 +186,7 @@ class LookerClient:
             ],
             filters={
                 _SAILY_DATE: f"{lookback_days} days",
-                _SAILY_FIRST_RECURRING: (
-                    '"first_with_refunds"'
-                ),
+                _SAILY_FIRST_RECURRING: ('"first_with_refunds"'),
                 _SAILY_COUPON: coupon_filter,
             },
         )
@@ -243,12 +228,8 @@ class LookerClient:
                 existing = result[code_upper]
                 result[code_upper] = CouponPerformance(
                     coupon_code=code_upper,
-                    total_revenue_usd=(
-                        existing.total_revenue_usd + revenue
-                    ),
-                    total_transactions=(
-                        existing.total_transactions + txns
-                    ),
+                    total_revenue_usd=(existing.total_revenue_usd + revenue),
+                    total_transactions=(existing.total_transactions + txns),
                 )
             else:
                 result[code_upper] = CouponPerformance(
@@ -286,9 +267,7 @@ class LookerClient:
             ("Saily", self._fetch_saily_performance),
         ]:
             try:
-                result = await fetcher(
-                    coupon_filter, lookback_days
-                )
+                result = await fetcher(coupon_filter, lookback_days)
                 for code, perf in result.items():
                     if code in merged:
                         existing = merged[code]

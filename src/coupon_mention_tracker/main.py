@@ -122,16 +122,13 @@ async def _fetch_coupon_performance(
     """
     if not settings.looker_client_id or not settings.looker_client_secret:
         logger.info(
-            "[LOOKER] API credentials not configured, "
-            "skipping performance data"
+            "[LOOKER] API credentials not configured, skipping performance data"
         )
         return None
 
-    coupon_codes = list({
-        row.coupon_detected
-        for row in rows
-        if row.coupon_detected
-    })
+    coupon_codes = list(
+        {row.coupon_detected for row in rows if row.coupon_detected}
+    )
 
     if not coupon_codes:
         logger.info("[LOOKER] No coupon codes to look up")
@@ -158,9 +155,7 @@ async def _fetch_coupon_performance(
         )
         return performance if performance else None
     except Exception:
-        logger.exception(
-            "[LOOKER] Failed to fetch coupon performance"
-        )
+        logger.exception("[LOOKER] Failed to fetch coupon performance")
         return None
     finally:
         await client.close()
@@ -247,9 +242,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
                     row.location or "Global",
                 )
 
-        coupon_performance = await _fetch_coupon_performance(
-            settings, rows
-        )
+        coupon_performance = await _fetch_coupon_performance(settings, rows)
 
         if send_slack:
             logger.info("[SLACK] Sending report to Slack...")

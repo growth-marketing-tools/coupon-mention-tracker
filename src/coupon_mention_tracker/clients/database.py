@@ -6,9 +6,9 @@ from contextlib import asynccontextmanager
 from typing import ClassVar
 
 import asyncpg
+from loguru import logger
 
 from coupon_mention_tracker.core.config import Settings
-from loguru import logger
 
 
 class DatabasePool:

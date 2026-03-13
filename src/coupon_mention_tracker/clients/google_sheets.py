@@ -6,8 +6,8 @@ from typing import Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
 from loguru import logger
+
 
 GOOGLE_API_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
