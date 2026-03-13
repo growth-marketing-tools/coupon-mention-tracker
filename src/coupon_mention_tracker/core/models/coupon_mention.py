@@ -107,9 +107,7 @@ class CouponPerformanceTrend(BaseModel):
         """Percentage revenue change, None if no prior data."""
         if self.prev_week_revenue == 0:
             return None
-        return (
-            self.revenue_change / self.prev_week_revenue
-        ) * 100
+        return (self.revenue_change / self.prev_week_revenue) * 100
 
 
 class WeeklyReportRow(BaseModel):

@@ -80,9 +80,7 @@ async def test_get_coupon_performance_trend_merges_explores(
     client._token = "tok"  # noqa: S105
     client._run_inline_query = mock_query
 
-    result = await client.get_coupon_performance_trend(
-        ["SAVE10"]
-    )
+    result = await client.get_coupon_performance_trend(["SAVE10"])
 
     assert "SAVE10" in result
     trend = result["SAVE10"]
@@ -112,9 +110,7 @@ async def test_trend_graceful_on_explore_failure(
     client._token = "tok"  # noqa: S105
     client._run_inline_query = mock_query
 
-    result = await client.get_coupon_performance_trend(
-        ["CODE1"]
-    )
+    result = await client.get_coupon_performance_trend(["CODE1"])
 
     assert "CODE1" in result
     assert result["CODE1"].this_week_revenue == 100.0
@@ -202,8 +198,7 @@ async def test_trend_shows_week_over_week_change(
             return []
         # Return different data per period filter
         date_filter = kwargs["filters"].get(
-            "prod_core__fct_payments_nordsec"
-            ".payment_created_date",
+            "prod_core__fct_payments_nordsec.payment_created_date",
             "",
         )
         if "14 days ago" in date_filter:
@@ -225,9 +220,7 @@ async def test_trend_shows_week_over_week_change(
     client._token = "tok"  # noqa: S105
     client._run_inline_query = mock_query
 
-    result = await client.get_coupon_performance_trend(
-        ["DEAL50"]
-    )
+    result = await client.get_coupon_performance_trend(["DEAL50"])
 
     assert "DEAL50" in result
     trend = result["DEAL50"]

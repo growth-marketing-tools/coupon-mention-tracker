@@ -123,8 +123,7 @@ async def _fetch_coupon_trends(
     """
     if not settings.looker_client_id or not settings.looker_client_secret:
         logger.info(
-            "[LOOKER] API credentials not configured, "
-            "skipping performance data"
+            "[LOOKER] API credentials not configured, skipping performance data"
         )
         return None
 
@@ -156,9 +155,7 @@ async def _fetch_coupon_trends(
         )
         return trends if trends else None
     except Exception:
-        logger.exception(
-            "[LOOKER] Failed to fetch coupon trends"
-        )
+        logger.exception("[LOOKER] Failed to fetch coupon trends")
         return None
     finally:
         await client.close()

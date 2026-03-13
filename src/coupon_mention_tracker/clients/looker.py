@@ -204,12 +204,10 @@ class LookerClient:
                         merged[code] = CouponPerformance(
                             coupon_code=code,
                             total_revenue_usd=(
-                                ex.total_revenue_usd
-                                + perf.total_revenue_usd
+                                ex.total_revenue_usd + perf.total_revenue_usd
                             ),
                             total_transactions=(
-                                ex.total_transactions
-                                + perf.total_transactions
+                                ex.total_transactions + perf.total_transactions
                             ),
                         )
                     else:
@@ -278,9 +276,7 @@ class LookerClient:
             ],
             filters={
                 _SAILY_DATE: date_filter,
-                _SAILY_FIRST_RECURRING: (
-                    '"first_with_refunds"'
-                ),
+                _SAILY_FIRST_RECURRING: ('"first_with_refunds"'),
                 _SAILY_COUPON: coupon_filter,
             },
         )
@@ -326,18 +322,10 @@ class LookerClient:
             pw = prev_week.get(code)
             trends[code] = CouponPerformanceTrend(
                 coupon_code=code,
-                this_week_revenue=(
-                    tw.total_revenue_usd if tw else 0.0
-                ),
-                this_week_transactions=(
-                    tw.total_transactions if tw else 0
-                ),
-                prev_week_revenue=(
-                    pw.total_revenue_usd if pw else 0.0
-                ),
-                prev_week_transactions=(
-                    pw.total_transactions if pw else 0
-                ),
+                this_week_revenue=(tw.total_revenue_usd if tw else 0.0),
+                this_week_transactions=(tw.total_transactions if tw else 0),
+                prev_week_revenue=(pw.total_revenue_usd if pw else 0.0),
+                prev_week_transactions=(pw.total_transactions if pw else 0),
             )
 
         return trends
