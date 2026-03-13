@@ -1,15 +1,26 @@
 """Raw SQL queries for the repositories."""
 
 GET_PROMPTS_BASE = """
-    SELECT id, prompt_text, primary_product, location, status, tags, created_at
-    FROM marketing_hub.ai_overviews_prompts
-    WHERE status = $1
+    SELECT p.id, p.prompt_text, p.primary_product, p.location, p.status,
+           p.created_at
+    FROM marketing_hub.ai_overviews_prompts p
+    WHERE p.status = $1
+"""
+
+TAG_FILTER_CLAUSE = """
+    AND (
+        SELECT COUNT(DISTINCT t.name)
+        FROM marketing_hub.ai_overviews_prompt_tags pt
+        JOIN marketing_hub.ai_overviews_tags t ON t.id = pt.tag_id
+        WHERE pt.prompt_id = {prompt_id_col}
+          AND LOWER(t.name) = ANY({param})
+    ) = {tag_count}
 """
 
 GET_RESULTS_FOR_PERIOD = """
     SELECT
         p.id as prompt_id, p.prompt_text, p.primary_product, p.location,
-        p.status, p.tags, p.created_at as prompt_created_at,
+        p.status, p.created_at as prompt_created_at,
         r.id as result_id, r.provider, r.scraped_date, r.scraped_at,
         r.response_text, r.sources, r.ahrefs_volume, r.sentiment_label
     FROM marketing_hub.ai_overviews_results r

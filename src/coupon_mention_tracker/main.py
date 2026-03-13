@@ -194,7 +194,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
         logger.info("[DATABASE] Connecting to database...")
         await repository.connect()
 
-        tags_filter = ["Dominykas"]
+        tags_filter = ["Affiliates"]
         logger.info(
             "[REPORT] Generating coupon mention report for last {} days "
             "(tags: {})",

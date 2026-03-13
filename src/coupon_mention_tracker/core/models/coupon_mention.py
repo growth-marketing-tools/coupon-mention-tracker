@@ -16,7 +16,6 @@ class AIOverviewPrompt(BaseModel):
     primary_product: str
     location: str | None = None
     status: str | None = None
-    tags: list[str] | None = None
     created_at: datetime | None = None
 
 

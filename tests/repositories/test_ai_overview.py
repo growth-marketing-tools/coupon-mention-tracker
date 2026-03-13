@@ -110,7 +110,6 @@ async def test_get_prompts_maps_rows_to_models() -> None:
             "primary_product": "nordvpn",
             "location": "US",
             "status": "active",
-            "tags": ["t"],
             "created_at": now,
         }
     ]
@@ -127,8 +126,8 @@ async def test_get_prompts_maps_rows_to_models() -> None:
 
     # Check query content briefly
     query, _params = conn.calls[0]
-    assert "SELECT id, prompt_text" in query
-    assert "WHERE status = $1" in query
+    assert "p.id" in query
+    assert "WHERE p.status = $1" in query
 
 
 @pytest.mark.asyncio
@@ -143,7 +142,6 @@ async def test_get_results_for_period_maps_rows_to_models() -> None:
             "primary_product": "p",
             "location": None,
             "status": "active",
-            "tags": None,
             "prompt_created_at": None,
             "result_id": result_id,
             "provider": "google",

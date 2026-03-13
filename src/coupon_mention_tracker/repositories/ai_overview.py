@@ -17,6 +17,31 @@ from coupon_mention_tracker.core.models import (
 from coupon_mention_tracker.repositories import sql_queries
 
 
+def _append_tag_filter(
+    query_parts: list[str],
+    params: list,
+    tags: list[str],
+    prompt_id_col: str,
+) -> None:
+    """Append a tag filter clause using the junction table.
+
+    Args:
+        query_parts: Mutable list of SQL fragments.
+        params: Mutable list of query parameters.
+        tags: Tag names to require (ALL must match).
+        prompt_id_col: SQL column expression for the prompt ID.
+    """
+    lowered = [t.lower() for t in tags]
+    params.append(lowered)
+    param_ref = f"${len(params)}::text[]"
+    clause = sql_queries.TAG_FILTER_CLAUSE.format(
+        prompt_id_col=prompt_id_col,
+        param=param_ref,
+        tag_count=len(lowered),
+    )
+    query_parts.append(clause)
+
+
 class AIOverviewRepository:
     """Repository for interacting with the AI Overviews database."""
 
@@ -68,27 +93,26 @@ class AIOverviewRepository:
             product: Filter by product (e.g., 'nordvpn', 'nordpass').
             location: Filter by location/country code.
             status: Filter by status (default: 'active').
-            tags: Filter by tags. Prompts must have ALL specified tags.
+            tags: Filter by tag names. Prompts must have ALL specified tags.
 
         Returns:
             List of AI Overview prompts.
         """
         query_parts = [sql_queries.GET_PROMPTS_BASE.strip()]
-        params = [status]
+        params: list = [status]
 
         if product:
             params.append(product)
-            query_parts.append(f"AND primary_product = ${len(params)}")
+            query_parts.append(f"AND p.primary_product = ${len(params)}")
 
         if location:
             params.append(location)
-            query_parts.append(f"AND location = ${len(params)}")
+            query_parts.append(f"AND p.location = ${len(params)}")
 
         if tags:
-            params.append(tags)
-            query_parts.append(f"AND tags @> ${len(params)}")
+            _append_tag_filter(query_parts, params, tags, "p.id")
 
-        query_parts.append("ORDER BY created_at DESC")
+        query_parts.append("ORDER BY p.created_at DESC")
 
         final_query = "\n".join(query_parts)
 
@@ -102,7 +126,6 @@ class AIOverviewRepository:
                 primary_product=row["primary_product"],
                 location=row["location"],
                 status=row["status"],
-                tags=row["tags"],
                 created_at=row["created_at"],
             )
             for row in rows
@@ -121,17 +144,16 @@ class AIOverviewRepository:
             start_date: Start of the period (inclusive).
             end_date: End of the period (inclusive).
             provider: AI provider to filter by (default: 'google').
-            tags: Filter by tags. Prompts must have ALL specified tags.
+            tags: Filter by tag names. Prompts must have ALL specified tags.
 
         Returns:
             List of tuples containing (prompt, result) pairs.
         """
         query_parts = [sql_queries.GET_RESULTS_FOR_PERIOD.strip()]
-        params = [start_date, end_date, provider]
+        params: list = [start_date, end_date, provider]
 
         if tags:
-            params.append(tags)
-            query_parts.append(f"AND p.tags @> ${len(params)}")
+            _append_tag_filter(query_parts, params, tags, "p.id")
 
         query_parts.append("ORDER BY r.scraped_date DESC, p.prompt_text")
 
@@ -148,7 +170,6 @@ class AIOverviewRepository:
                 primary_product=row["primary_product"],
                 location=row["location"],
                 status=row["status"],
-                tags=row["tags"],
                 created_at=row["prompt_created_at"],
             )
             result = AIOverviewResult(
@@ -177,7 +198,7 @@ class AIOverviewRepository:
         Args:
             days: Number of days to look back (default: 7).
             provider: AI provider to filter by (default: 'google').
-            tags: Filter by tags. Prompts must have ALL specified tags.
+            tags: Filter by tag names. Prompts must have ALL specified tags.
 
         Returns:
             List of tuples containing (prompt, result) pairs.
