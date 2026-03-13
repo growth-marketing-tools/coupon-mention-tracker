@@ -4,10 +4,13 @@ import asyncio
 import sys
 from datetime import date, timedelta
 
+from loguru import logger
+
 from coupon_mention_tracker.clients.google_sheets import GoogleSheetsClient
+from coupon_mention_tracker.clients.looker import LookerClient
 from coupon_mention_tracker.clients.slack import SlackClient
 from coupon_mention_tracker.core.config import Settings, get_settings
-from coupon_mention_tracker.core.logger import get_logger, setup_logging
+from coupon_mention_tracker.core.logger import setup_logging
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
@@ -19,9 +22,6 @@ from coupon_mention_tracker.repositories.ai_overview import (
 from coupon_mention_tracker.repositories.looker import LookerRepository
 from coupon_mention_tracker.services.coupon_matcher import CouponMatcher
 from coupon_mention_tracker.services.report import WeeklyReportGenerator
-
-
-logger = get_logger(__name__)
 
 
 def build_tracking_records(
@@ -107,6 +107,65 @@ def fetch_coupons_from_google_sheets(settings: Settings) -> list[str]:
     )
 
 
+async def _fetch_coupon_performance(
+    settings: Settings,
+    rows: list,
+) -> dict | None:
+    """Fetch coupon performance from Looker API.
+
+    Args:
+        settings: Application settings.
+        rows: Weekly report rows containing detected coupons.
+
+    Returns:
+        Dict of coupon code to performance, or None on failure.
+    """
+    if not settings.looker_client_id or not settings.looker_client_secret:
+        logger.info(
+            "[LOOKER] API credentials not configured, "
+            "skipping performance data"
+        )
+        return None
+
+    coupon_codes = list({
+        row.coupon_detected
+        for row in rows
+        if row.coupon_detected
+    })
+
+    if not coupon_codes:
+        logger.info("[LOOKER] No coupon codes to look up")
+        return None
+
+    logger.info(
+        "[LOOKER] Fetching performance for %d coupons",
+        len(coupon_codes),
+    )
+
+    client = LookerClient(
+        base_url=settings.looker_base_url,
+        client_id=settings.looker_client_id,
+        client_secret=settings.looker_client_secret,
+    )
+    try:
+        performance = await client.get_coupon_performance(
+            coupon_codes=coupon_codes,
+            lookback_days=14,
+        )
+        logger.info(
+            "[LOOKER] Got performance for %d coupons",
+            len(performance),
+        )
+        return performance if performance else None
+    except Exception:
+        logger.exception(
+            "[LOOKER] Failed to fetch coupon performance"
+        )
+        return None
+    finally:
+        await client.close()
+
+
 async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
     """Run the weekly coupon mention report.
 
@@ -188,12 +247,17 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
                     row.location or "Global",
                 )
 
+        coupon_performance = await _fetch_coupon_performance(
+            settings, rows
+        )
+
         if send_slack:
             logger.info("[SLACK] Sending report to Slack...")
             success = await notifier.send_weekly_report(
                 rows=rows,
                 start_date=start_date,
                 end_date=end_date,
+                coupon_performance=coupon_performance,
             )
             if success:
                 logger.info("[SLACK] Report sent to Slack successfully")

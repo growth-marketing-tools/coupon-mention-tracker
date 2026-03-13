@@ -80,6 +80,19 @@ class Settings(BaseSettings):
         description="Number of days to look back for weekly report",
     )
 
+    looker_base_url: str = Field(
+        default="https://tesonet.eu.looker.com",
+        description="Looker instance base URL for API access",
+    )
+    looker_client_id: str = Field(
+        default="",
+        description="Looker API3 client ID",
+    )
+    looker_client_secret: str = Field(
+        default="",
+        description="Looker API3 client secret",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

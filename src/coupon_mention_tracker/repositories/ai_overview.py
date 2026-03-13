@@ -6,18 +6,16 @@ from datetime import date, timedelta
 from uuid import UUID
 
 import asyncpg
+from loguru import logger
 
 from coupon_mention_tracker.clients.database import DatabasePool
 from coupon_mention_tracker.core.config import Settings
-from coupon_mention_tracker.core.logger import get_logger
 from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
 )
 from coupon_mention_tracker.repositories import sql_queries
 
-
-logger = get_logger(__name__)
 
 
 class AIOverviewRepository:

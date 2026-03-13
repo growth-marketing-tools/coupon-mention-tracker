@@ -8,10 +8,7 @@ from typing import ClassVar
 import asyncpg
 
 from coupon_mention_tracker.core.config import Settings
-from coupon_mention_tracker.core.logger import get_logger
-
-
-logger = get_logger(__name__)
+from loguru import logger
 
 
 class DatabasePool:

@@ -4,11 +4,9 @@ from datetime import date
 from uuid import UUID
 
 from coupon_mention_tracker.clients.database import DatabasePool
-from coupon_mention_tracker.core.logger import get_logger
+from loguru import logger
+
 from coupon_mention_tracker.repositories import sql_queries
-
-
-logger = get_logger(__name__)
 
 
 class LookerRepository:

@@ -70,6 +70,22 @@ class CouponMatch(BaseModel):
     )
 
 
+class CouponPerformance(BaseModel):
+    """Revenue and transaction data for a coupon code."""
+
+    coupon_code: str = Field(
+        description="The coupon code",
+    )
+    total_revenue_usd: float = Field(
+        default=0.0,
+        description="Total first-purchase revenue in USD",
+    )
+    total_transactions: int = Field(
+        default=0,
+        description="Total first-purchase transaction count",
+    )
+
+
 class WeeklyReportRow(BaseModel):
     """A single row in the weekly coupon report."""
 
