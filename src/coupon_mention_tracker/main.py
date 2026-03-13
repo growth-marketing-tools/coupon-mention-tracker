@@ -136,7 +136,7 @@ async def _fetch_coupon_trends(
         return None
 
     logger.info(
-        "[LOOKER] Fetching trends for %d coupons",
+        "[LOOKER] Fetching trends for {} coupons",
         len(coupon_codes),
     )
 
@@ -150,7 +150,7 @@ async def _fetch_coupon_trends(
             coupon_codes=coupon_codes,
         )
         logger.info(
-            "[LOOKER] Got trends for %d coupons",
+            "[LOOKER] Got trends for {} coupons",
             len(trends),
         )
         return trends if trends else None
@@ -176,7 +176,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
     try:
         coupons = fetch_coupons_from_google_sheets(settings)
-        logger.info("[GOOGLE_SHEETS] Tracking %d coupon codes", len(coupons))
+        logger.info("[GOOGLE_SHEETS] Tracking {} coupon codes", len(coupons))
         if not coupons:
             logger.warning(
                 "[GOOGLE_SHEETS] No coupon codes found; "
@@ -196,8 +196,8 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         tags_filter = ["Dominykas"]
         logger.info(
-            "[REPORT] Generating coupon mention report for last %d days "
-            "(tags: %s)",
+            "[REPORT] Generating coupon mention report for last {} days "
+            "(tags: {})",
             days,
             tags_filter,
         )
@@ -217,8 +217,8 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
             (row.keyword, row.location) for row in rows if row.has_ai_overview
         }
         logger.info(
-            "[REPORT] Report generated: %d keywords, %d with AI Overview, "
-            "%d matches",
+            "[REPORT] Report generated: {} keywords, {} with AI Overview, "
+            "{} matches",
             len(unique_keywords),
             len(keywords_with_overview),
             len(matches),
@@ -231,12 +231,12 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
 
         if invalid_coupons:
             logger.warning(
-                "[REPORT] Found %d invalid/outdated coupons in AI Overviews",
+                "[REPORT] Found {} invalid/outdated coupons in AI Overviews",
                 len(invalid_coupons),
             )
             for row in invalid_coupons:
                 logger.warning(
-                    "[REPORT]  - %s in '%s' (%s)",
+                    "[REPORT]  - {} in '{}' ({})",
                     row.coupon_detected,
                     row.keyword,
                     row.location or "Global",
@@ -269,7 +269,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
                 tracking_records
             )
             logger.info(
-                "[LOOKER] Saved %d tracking records to Looker",
+                "[LOOKER] Saved {} tracking records to Looker",
                 saved_count,
             )
 

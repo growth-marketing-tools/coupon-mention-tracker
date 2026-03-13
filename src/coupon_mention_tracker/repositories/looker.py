@@ -121,6 +121,6 @@ class LookerRepository:
             await conn.executemany(sql_queries.UPSERT_TRACKING_HISTORY, params)
 
         logger.info(
-            "[LOOKER] Saved %d tracking records to looker schema", len(records)
+            "[LOOKER] Saved {} tracking records to looker schema", len(records)
         )
         return len(records)

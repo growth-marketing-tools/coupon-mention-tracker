@@ -169,7 +169,7 @@ class GoogleSheetsClient:
         except HttpError as error:
             logger.error(
                 "[GOOGLE_SHEETS] Error in get_column_values: "
-                "Failed to fetch values from range %s in spreadsheet %s: %s",
+                "Failed to fetch values from range {} in spreadsheet {}: {}",
                 range_notation,
                 self._spreadsheet_id,
                 error,

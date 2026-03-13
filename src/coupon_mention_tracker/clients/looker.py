@@ -213,14 +213,14 @@ class LookerClient:
                     else:
                         merged[code] = perf
                 logger.info(
-                    "[LOOKER] %s (%s): %d results",
+                    "[LOOKER] {} ({}): {} results",
                     label,
                     date_filter,
                     len(result),
                 )
             except Exception:
                 logger.exception(
-                    "[LOOKER] Failed %s (%s)",
+                    "[LOOKER] Failed {} ({})",
                     label,
                     date_filter,
                 )
