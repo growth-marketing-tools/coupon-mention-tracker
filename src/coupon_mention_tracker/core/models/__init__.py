@@ -5,6 +5,7 @@ from coupon_mention_tracker.core.models.coupon_mention import (
     AIOverviewResult,
     CouponMatch,
     CouponPerformance,
+    CouponPerformanceTrend,
     WeeklyReportRow,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "AIOverviewResult",
     "CouponMatch",
     "CouponPerformance",
+    "CouponPerformanceTrend",
     "WeeklyReportRow",
 ]

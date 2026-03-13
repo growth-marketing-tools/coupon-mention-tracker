@@ -15,6 +15,7 @@ from coupon_mention_tracker.core.models import (
     AIOverviewPrompt,
     AIOverviewResult,
     CouponMatch,
+    CouponPerformanceTrend,
 )
 from coupon_mention_tracker.repositories.ai_overview import (
     AIOverviewRepository,
@@ -107,22 +108,23 @@ def fetch_coupons_from_google_sheets(settings: Settings) -> list[str]:
     )
 
 
-async def _fetch_coupon_performance(
+async def _fetch_coupon_trends(
     settings: Settings,
     rows: list,
-) -> dict | None:
-    """Fetch coupon performance from Looker API.
+) -> dict[str, CouponPerformanceTrend] | None:
+    """Fetch week-over-week coupon performance trends.
 
     Args:
         settings: Application settings.
         rows: Weekly report rows containing detected coupons.
 
     Returns:
-        Dict of coupon code to performance, or None on failure.
+        Dict of coupon code to trend data, or None on failure.
     """
     if not settings.looker_client_id or not settings.looker_client_secret:
         logger.info(
-            "[LOOKER] API credentials not configured, skipping performance data"
+            "[LOOKER] API credentials not configured, "
+            "skipping performance data"
         )
         return None
 
@@ -135,7 +137,7 @@ async def _fetch_coupon_performance(
         return None
 
     logger.info(
-        "[LOOKER] Fetching performance for %d coupons",
+        "[LOOKER] Fetching trends for %d coupons",
         len(coupon_codes),
     )
 
@@ -145,17 +147,18 @@ async def _fetch_coupon_performance(
         client_secret=settings.looker_client_secret,
     )
     try:
-        performance = await client.get_coupon_performance(
+        trends = await client.get_coupon_performance_trend(
             coupon_codes=coupon_codes,
-            lookback_days=14,
         )
         logger.info(
-            "[LOOKER] Got performance for %d coupons",
-            len(performance),
+            "[LOOKER] Got trends for %d coupons",
+            len(trends),
         )
-        return performance if performance else None
+        return trends if trends else None
     except Exception:
-        logger.exception("[LOOKER] Failed to fetch coupon performance")
+        logger.exception(
+            "[LOOKER] Failed to fetch coupon trends"
+        )
         return None
     finally:
         await client.close()
@@ -242,7 +245,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
                     row.location or "Global",
                 )
 
-        coupon_performance = await _fetch_coupon_performance(settings, rows)
+        coupon_trends = await _fetch_coupon_trends(settings, rows)
 
         if send_slack:
             logger.info("[SLACK] Sending report to Slack...")
@@ -250,7 +253,7 @@ async def run_weekly_report(days: int = 7, send_slack: bool = True) -> int:
                 rows=rows,
                 start_date=start_date,
                 end_date=end_date,
-                coupon_performance=coupon_performance,
+                coupon_trends=coupon_trends,
             )
             if success:
                 logger.info("[SLACK] Report sent to Slack successfully")

@@ -42,15 +42,15 @@ async def test_authenticate_stores_token(client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_coupon_performance_empty_codes(
+async def test_get_coupon_performance_trend_empty_codes(
     client,
 ) -> None:
-    result = await client.get_coupon_performance([])
+    result = await client.get_coupon_performance_trend([])
     assert result == {}
 
 
 @pytest.mark.asyncio
-async def test_get_coupon_performance_merges_explores(
+async def test_get_coupon_performance_trend_merges_explores(
     client,
 ) -> None:
     nordsec_rows = [
@@ -80,16 +80,20 @@ async def test_get_coupon_performance_merges_explores(
     client._token = "tok"  # noqa: S105
     client._run_inline_query = mock_query
 
-    result = await client.get_coupon_performance(["SAVE10"])
+    result = await client.get_coupon_performance_trend(
+        ["SAVE10"]
+    )
 
     assert "SAVE10" in result
-    assert result["SAVE10"].total_revenue_usd == 700.0
-    assert result["SAVE10"].total_transactions == 15
-    assert call_count == 2
+    trend = result["SAVE10"]
+    assert trend.this_week_revenue == 700.0
+    assert trend.this_week_transactions == 15
+    # 4 calls: 2 explores x 2 periods (this week + prev week)
+    assert call_count == 4
 
 
 @pytest.mark.asyncio
-async def test_get_coupon_performance_graceful_on_failure(
+async def test_trend_graceful_on_explore_failure(
     client,
 ) -> None:
     nordsec_rows = [
@@ -100,11 +104,7 @@ async def test_get_coupon_performance_graceful_on_failure(
         },
     ]
 
-    call_count = 0
-
     async def mock_query(**kwargs):
-        nonlocal call_count
-        call_count += 1
         if "esim" in kwargs["view"]:
             raise RuntimeError("Saily API down")
         return nordsec_rows
@@ -112,11 +112,13 @@ async def test_get_coupon_performance_graceful_on_failure(
     client._token = "tok"  # noqa: S105
     client._run_inline_query = mock_query
 
-    result = await client.get_coupon_performance(["CODE1"])
+    result = await client.get_coupon_performance_trend(
+        ["CODE1"]
+    )
 
     assert "CODE1" in result
-    assert result["CODE1"].total_revenue_usd == 100.0
-    assert result["CODE1"].total_transactions == 3
+    assert result["CODE1"].this_week_revenue == 100.0
+    assert result["CODE1"].this_week_transactions == 3
 
 
 @pytest.mark.asyncio
@@ -184,3 +186,52 @@ async def test_reauthenticates_on_401(client) -> None:
 
     assert result == []
     assert client._token == "new-tok"  # noqa: S105
+
+
+@pytest.mark.asyncio
+async def test_trend_shows_week_over_week_change(
+    client,
+) -> None:
+    """Verify trends capture both this-week and prev-week data."""
+    call_count = 0
+
+    async def mock_query(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if "nordsec" not in kwargs["view"]:
+            return []
+        # Return different data per period filter
+        date_filter = kwargs["filters"].get(
+            "prod_core__fct_payments_nordsec"
+            ".payment_created_date",
+            "",
+        )
+        if "14 days ago" in date_filter:
+            return [
+                {
+                    _NORDSEC_COUPON: "DEAL50",
+                    _NORDSEC_REVENUE: 1000.0,
+                    _NORDSEC_TRANSACTIONS: 20,
+                },
+            ]
+        return [
+            {
+                _NORDSEC_COUPON: "DEAL50",
+                _NORDSEC_REVENUE: 1500.0,
+                _NORDSEC_TRANSACTIONS: 30,
+            },
+        ]
+
+    client._token = "tok"  # noqa: S105
+    client._run_inline_query = mock_query
+
+    result = await client.get_coupon_performance_trend(
+        ["DEAL50"]
+    )
+
+    assert "DEAL50" in result
+    trend = result["DEAL50"]
+    assert trend.this_week_revenue == 1500.0
+    assert trend.prev_week_revenue == 1000.0
+    assert trend.revenue_change == 500.0
+    assert trend.revenue_change_pct == pytest.approx(50.0)

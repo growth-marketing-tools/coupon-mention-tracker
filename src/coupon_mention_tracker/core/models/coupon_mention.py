@@ -86,6 +86,32 @@ class CouponPerformance(BaseModel):
     )
 
 
+class CouponPerformanceTrend(BaseModel):
+    """Week-over-week coupon performance comparison."""
+
+    coupon_code: str = Field(
+        description="The coupon code",
+    )
+    this_week_revenue: float = Field(default=0.0)
+    this_week_transactions: int = Field(default=0)
+    prev_week_revenue: float = Field(default=0.0)
+    prev_week_transactions: int = Field(default=0)
+
+    @property
+    def revenue_change(self) -> float:
+        """Absolute revenue change."""
+        return self.this_week_revenue - self.prev_week_revenue
+
+    @property
+    def revenue_change_pct(self) -> float | None:
+        """Percentage revenue change, None if no prior data."""
+        if self.prev_week_revenue == 0:
+            return None
+        return (
+            self.revenue_change / self.prev_week_revenue
+        ) * 100
+
+
 class WeeklyReportRow(BaseModel):
     """A single row in the weekly coupon report."""
 

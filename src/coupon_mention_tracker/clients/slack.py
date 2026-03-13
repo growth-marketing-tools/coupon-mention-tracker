@@ -17,7 +17,7 @@ from slack_sdk.webhook.async_client import AsyncWebhookClient
 
 from coupon_mention_tracker.core.models import (
     CouponMatch,
-    CouponPerformance,
+    CouponPerformanceTrend,
     WeeklyReportRow,
 )
 
@@ -183,51 +183,82 @@ class SlackClient:
         )
 
     @staticmethod
-    def _format_performance_section(
-        performance: dict[str, CouponPerformance],
-    ) -> list[Block]:
-        """Build Slack blocks for coupon performance data.
+    def _format_change(
+        change: float,
+        pct: float | None,
+    ) -> str:
+        """Format a revenue change with percentage.
 
         Args:
-            performance: Map of coupon code to performance.
+            change: Absolute revenue change in USD.
+            pct: Percentage change, or None if no prior data.
+
+        Returns:
+            Formatted change string.
+        """
+        sign = "+" if change >= 0 else ""
+        if pct is None:
+            if change > 0:
+                return f"{sign}${change:,.2f} (new)"
+            return "no data"
+        return f"{sign}${change:,.2f} ({sign}{pct:.1f}%)"
+
+    @staticmethod
+    def _format_performance_section(
+        trends: dict[str, CouponPerformanceTrend],
+    ) -> list[Block]:
+        """Build Slack blocks for week-over-week performance.
+
+        Args:
+            trends: Map of coupon code to trend data.
 
         Returns:
             List of Slack blocks for the performance section.
         """
-        if not performance:
+        if not trends:
             return []
 
         blocks: list[Block] = [
             DividerBlock(),
             SectionBlock(
                 text=MarkdownTextObject(
-                    text="*Coupon Performance (last 2 weeks)*"
+                    text="*Coupon Performance (week over week)*"
                 )
             ),
         ]
 
-        sorted_coupons = sorted(
-            performance.values(),
-            key=lambda p: p.total_revenue_usd,
+        sorted_trends = sorted(
+            trends.values(),
+            key=lambda t: t.this_week_revenue,
             reverse=True,
         )
 
-        lines: list[str] = []
-        for perf in sorted_coupons:
-            revenue = f"${perf.total_revenue_usd:,.2f}"
-            lines.append(
-                f"*`{perf.coupon_code}`*: "
-                f"{revenue} revenue, "
-                f"{perf.total_transactions} transactions"
+        for trend in sorted_trends:
+            change_str = SlackClient._format_change(
+                trend.revenue_change,
+                trend.revenue_change_pct,
             )
-
-        blocks.append(
-            SectionBlock(
-                text=MarkdownTextObject(
-                    text="\n".join(lines),
+            lines = [
+                f"*`{trend.coupon_code}`*",
+                (
+                    f"• This week: "
+                    f"${trend.this_week_revenue:,.2f} "
+                    f"({trend.this_week_transactions} txns)"
+                ),
+                (
+                    f"• Prev week: "
+                    f"${trend.prev_week_revenue:,.2f} "
+                    f"({trend.prev_week_transactions} txns)"
+                ),
+                f"• Change: {change_str}",
+            ]
+            blocks.append(
+                SectionBlock(
+                    text=MarkdownTextObject(
+                        text="\n".join(lines),
+                    )
                 )
             )
-        )
 
         return blocks
 
@@ -236,7 +267,9 @@ class SlackClient:
         report_rows: list[WeeklyReportRow],
         start_date: date,
         end_date: date,
-        coupon_performance: (dict[str, CouponPerformance] | None) = None,
+        coupon_trends: (
+            dict[str, CouponPerformanceTrend] | None
+        ) = None,
     ) -> list[Block]:
         """Build Slack blocks for weekly report.
 
@@ -244,7 +277,7 @@ class SlackClient:
             report_rows: Weekly report data rows.
             start_date: Report period start date.
             end_date: Report period end date.
-            coupon_performance: Optional revenue data per coupon.
+            coupon_trends: Optional week-over-week trend data.
 
         Returns:
             List of Slack Block Kit blocks.
@@ -254,19 +287,28 @@ class SlackClient:
             for row in report_rows
             if row.has_ai_overview
         }
-        with_coupons = [row for row in report_rows if row.coupon_detected]
+        with_coupons = [
+            row for row in report_rows if row.coupon_detected
+        ]
         invalid_coupons = [
-            row for row in with_coupons if row.is_valid_coupon is False
+            row
+            for row in with_coupons
+            if row.is_valid_coupon is False
         ]
 
         blocks: list[Block] = [
             HeaderBlock(
-                text=PlainTextObject(text="Weekly coupon mention report")
+                text=PlainTextObject(
+                    text="Weekly coupon mention report"
+                )
             ),
             ContextBlock(
                 elements=[
                     MarkdownTextObject(
-                        text=(f"Period: {start_date} to {end_date}")
+                        text=(
+                            f"Period: {start_date} "
+                            f"to {end_date}"
+                        )
                     )
                 ]
             ),
@@ -288,14 +330,20 @@ class SlackClient:
         if invalid_coupons:
             blocks.append(
                 SectionBlock(
-                    text=MarkdownTextObject(text="*Untracked coupons detected*")
+                    text=MarkdownTextObject(
+                        text="*Untracked coupons detected*"
+                    )
                 )
             )
-            for code, grouped in self._group_rows_by_coupon(invalid_coupons):
+            for code, grouped in self._group_rows_by_coupon(
+                invalid_coupons
+            ):
                 blocks.append(
                     SectionBlock(
                         text=MarkdownTextObject(
-                            text=self._format_coupon_group_text(code, grouped)
+                            text=self._format_coupon_group_text(
+                                code, grouped
+                            )
                         )
                     )
                 )
@@ -305,21 +353,33 @@ class SlackClient:
                 blocks.append(DividerBlock())
             blocks.append(
                 SectionBlock(
-                    text=MarkdownTextObject(text="*Valid coupon mentions*")
+                    text=MarkdownTextObject(
+                        text="*Valid coupon mentions*"
+                    )
                 )
             )
-            valid = [row for row in with_coupons if row.is_valid_coupon is True]
-            for code, grouped in self._group_rows_by_coupon(valid):
+            valid = [
+                row
+                for row in with_coupons
+                if row.is_valid_coupon is True
+            ]
+            for code, grouped in self._group_rows_by_coupon(
+                valid
+            ):
                 blocks.append(
                     SectionBlock(
                         text=MarkdownTextObject(
-                            text=self._format_coupon_group_text(code, grouped)
+                            text=self._format_coupon_group_text(
+                                code, grouped
+                            )
                         )
                     )
                 )
 
-        if coupon_performance:
-            blocks.extend(self._format_performance_section(coupon_performance))
+        if coupon_trends:
+            blocks.extend(
+                self._format_performance_section(coupon_trends)
+            )
 
         return blocks
 
@@ -328,7 +388,9 @@ class SlackClient:
         rows: list[WeeklyReportRow],
         start_date: date,
         end_date: date,
-        coupon_performance: (dict[str, CouponPerformance] | None) = None,
+        coupon_trends: (
+            dict[str, CouponPerformanceTrend] | None
+        ) = None,
     ) -> bool:
         """Send the weekly coupon mention report.
 
@@ -336,16 +398,19 @@ class SlackClient:
             rows: Report data rows.
             start_date: Start of reporting period.
             end_date: End of reporting period.
-            coupon_performance: Optional revenue data per coupon.
+            coupon_trends: Optional week-over-week trend data.
 
         Returns:
             True if report was sent successfully.
         """
         blocks = self._build_weekly_report_blocks(
-            rows, start_date, end_date, coupon_performance
+            rows, start_date, end_date, coupon_trends
         )
 
         return await self.send_message(
-            text=(f"Weekly coupon report: {start_date} to {end_date}"),
+            text=(
+                f"Weekly coupon report: "
+                f"{start_date} to {end_date}"
+            ),
             blocks=blocks,
         )

@@ -7,7 +7,10 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from coupon_mention_tracker.core.models import CouponPerformance
+from coupon_mention_tracker.core.models import (
+    CouponPerformance,
+    CouponPerformanceTrend,
+)
 
 
 _API_PREFIX = "/api/4.0"
@@ -127,76 +130,6 @@ class LookerClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def _fetch_nordsec_performance(
-        self,
-        coupon_filter: str,
-        lookback_days: int,
-    ) -> dict[str, CouponPerformance]:
-        """Fetch NordSec coupon performance.
-
-        Args:
-            coupon_filter: Comma-separated coupon codes.
-            lookback_days: Number of days to look back.
-
-        Returns:
-            Dict mapping coupon code to performance data.
-        """
-        rows = await self._run_inline_query(
-            model=_NORDSEC_MODEL,
-            view=_NORDSEC_VIEW,
-            fields=[
-                _NORDSEC_COUPON,
-                _NORDSEC_REVENUE,
-                _NORDSEC_TRANSACTIONS,
-            ],
-            filters={
-                _NORDSEC_DATE: f"{lookback_days} days",
-                _NORDSEC_FIRST_RECURRING: "first",
-                _NORDSEC_COUPON: coupon_filter,
-            },
-        )
-        return self._parse_performance_rows(
-            rows,
-            coupon_field=_NORDSEC_COUPON,
-            revenue_field=_NORDSEC_REVENUE,
-            transactions_field=_NORDSEC_TRANSACTIONS,
-        )
-
-    async def _fetch_saily_performance(
-        self,
-        coupon_filter: str,
-        lookback_days: int,
-    ) -> dict[str, CouponPerformance]:
-        """Fetch Saily coupon performance.
-
-        Args:
-            coupon_filter: Comma-separated coupon codes.
-            lookback_days: Number of days to look back.
-
-        Returns:
-            Dict mapping coupon code to performance data.
-        """
-        rows = await self._run_inline_query(
-            model=_SAILY_MODEL,
-            view=_SAILY_VIEW,
-            fields=[
-                _SAILY_COUPON,
-                _SAILY_REVENUE,
-                _SAILY_TRANSACTIONS,
-            ],
-            filters={
-                _SAILY_DATE: f"{lookback_days} days",
-                _SAILY_FIRST_RECURRING: ('"first_with_refunds"'),
-                _SAILY_COUPON: coupon_filter,
-            },
-        )
-        return self._parse_performance_rows(
-            rows,
-            coupon_field=_SAILY_COUPON,
-            revenue_field=_SAILY_REVENUE,
-            transactions_field=_SAILY_TRANSACTIONS,
-        )
-
     @staticmethod
     def _parse_performance_rows(
         rows: list[dict[str, Any]],
@@ -239,60 +172,172 @@ class LookerClient:
                 )
         return result
 
-    async def get_coupon_performance(
+    async def _fetch_period_performance(
         self,
-        coupon_codes: list[str],
-        lookback_days: int = 14,
+        coupon_filter: str,
+        date_filter: str,
     ) -> dict[str, CouponPerformance]:
-        """Fetch performance for coupons across all products.
-
-        Queries both NordSec and Saily explores, then merges
-        results by coupon code.
+        """Fetch combined performance for a date period.
 
         Args:
-            coupon_codes: Coupon codes to look up.
-            lookback_days: Days to look back (default 14).
+            coupon_filter: Comma-separated coupon codes.
+            date_filter: Looker date filter expression.
 
         Returns:
-            Dict mapping uppercase coupon code to performance.
+            Dict mapping coupon code to merged performance.
         """
-        if not coupon_codes:
-            return {}
-
-        coupon_filter = ",".join(coupon_codes)
         merged: dict[str, CouponPerformance] = {}
 
-        for label, fetcher in [
-            ("NordSec", self._fetch_nordsec_performance),
-            ("Saily", self._fetch_saily_performance),
+        for label, is_nordsec in [
+            ("NordSec", True),
+            ("Saily", False),
         ]:
             try:
-                result = await fetcher(coupon_filter, lookback_days)
+                result = await self._fetch_explore_performance(
+                    coupon_filter=coupon_filter,
+                    date_filter=date_filter,
+                    is_nordsec=is_nordsec,
+                )
                 for code, perf in result.items():
                     if code in merged:
-                        existing = merged[code]
+                        ex = merged[code]
                         merged[code] = CouponPerformance(
                             coupon_code=code,
                             total_revenue_usd=(
-                                existing.total_revenue_usd
+                                ex.total_revenue_usd
                                 + perf.total_revenue_usd
                             ),
                             total_transactions=(
-                                existing.total_transactions
+                                ex.total_transactions
                                 + perf.total_transactions
                             ),
                         )
                     else:
                         merged[code] = perf
                 logger.info(
-                    "[LOOKER] %s: fetched %d coupon results",
+                    "[LOOKER] %s (%s): %d results",
                     label,
+                    date_filter,
                     len(result),
                 )
             except Exception:
                 logger.exception(
-                    "[LOOKER] Failed to fetch %s performance",
+                    "[LOOKER] Failed %s (%s)",
                     label,
+                    date_filter,
                 )
 
         return merged
+
+    async def _fetch_explore_performance(
+        self,
+        coupon_filter: str,
+        date_filter: str,
+        *,
+        is_nordsec: bool,
+    ) -> dict[str, CouponPerformance]:
+        """Fetch performance from a single explore.
+
+        Args:
+            coupon_filter: Comma-separated coupon codes.
+            date_filter: Looker date filter expression.
+            is_nordsec: True for NordSec, False for Saily.
+
+        Returns:
+            Dict mapping coupon code to performance data.
+        """
+        if is_nordsec:
+            rows = await self._run_inline_query(
+                model=_NORDSEC_MODEL,
+                view=_NORDSEC_VIEW,
+                fields=[
+                    _NORDSEC_COUPON,
+                    _NORDSEC_REVENUE,
+                    _NORDSEC_TRANSACTIONS,
+                ],
+                filters={
+                    _NORDSEC_DATE: date_filter,
+                    _NORDSEC_FIRST_RECURRING: "first",
+                    _NORDSEC_COUPON: coupon_filter,
+                },
+            )
+            return self._parse_performance_rows(
+                rows,
+                coupon_field=_NORDSEC_COUPON,
+                revenue_field=_NORDSEC_REVENUE,
+                transactions_field=_NORDSEC_TRANSACTIONS,
+            )
+
+        rows = await self._run_inline_query(
+            model=_SAILY_MODEL,
+            view=_SAILY_VIEW,
+            fields=[
+                _SAILY_COUPON,
+                _SAILY_REVENUE,
+                _SAILY_TRANSACTIONS,
+            ],
+            filters={
+                _SAILY_DATE: date_filter,
+                _SAILY_FIRST_RECURRING: (
+                    '"first_with_refunds"'
+                ),
+                _SAILY_COUPON: coupon_filter,
+            },
+        )
+        return self._parse_performance_rows(
+            rows,
+            coupon_field=_SAILY_COUPON,
+            revenue_field=_SAILY_REVENUE,
+            transactions_field=_SAILY_TRANSACTIONS,
+        )
+
+    async def get_coupon_performance_trend(
+        self,
+        coupon_codes: list[str],
+    ) -> dict[str, CouponPerformanceTrend]:
+        """Fetch week-over-week coupon performance trends.
+
+        Queries this week (last 7 days) and previous week
+        (8-14 days ago), then builds trend comparison.
+
+        Args:
+            coupon_codes: Coupon codes to look up.
+
+        Returns:
+            Dict mapping coupon code to trend data.
+        """
+        if not coupon_codes:
+            return {}
+
+        coupon_filter = ",".join(coupon_codes)
+
+        this_week = await self._fetch_period_performance(
+            coupon_filter, "7 days"
+        )
+        prev_week = await self._fetch_period_performance(
+            coupon_filter, "14 days ago for 7 days"
+        )
+
+        all_codes = set(this_week) | set(prev_week)
+        trends: dict[str, CouponPerformanceTrend] = {}
+
+        for code in all_codes:
+            tw = this_week.get(code)
+            pw = prev_week.get(code)
+            trends[code] = CouponPerformanceTrend(
+                coupon_code=code,
+                this_week_revenue=(
+                    tw.total_revenue_usd if tw else 0.0
+                ),
+                this_week_transactions=(
+                    tw.total_transactions if tw else 0
+                ),
+                prev_week_revenue=(
+                    pw.total_revenue_usd if pw else 0.0
+                ),
+                prev_week_transactions=(
+                    pw.total_transactions if pw else 0
+                ),
+            )
+
+        return trends
