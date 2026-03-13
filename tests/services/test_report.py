@@ -45,7 +45,9 @@ class _FakeNotifier(SlackClient):
         self.sent = []
         self._return_value = True
 
-    async def send_weekly_report(self, rows, start_date, end_date):
+    async def send_weekly_report(
+        self, rows, start_date, end_date, coupon_trends=None
+    ):
         self.sent.append((rows, start_date, end_date))
         return self._return_value
 
