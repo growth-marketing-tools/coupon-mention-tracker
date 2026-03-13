@@ -70,10 +70,10 @@ async def test_get_coupon_performance_merges_explores(
 
     call_count = 0
 
-    async def mock_query(*, model, view, fields, filters):
+    async def mock_query(**kwargs):
         nonlocal call_count
         call_count += 1
-        if "nordsec" in view:
+        if "nordsec" in kwargs["view"]:
             return nordsec_rows
         return saily_rows
 
@@ -102,10 +102,10 @@ async def test_get_coupon_performance_graceful_on_failure(
 
     call_count = 0
 
-    async def mock_query(*, model, view, fields, filters):
+    async def mock_query(**kwargs):
         nonlocal call_count
         call_count += 1
-        if "esim" in view:
+        if "esim" in kwargs["view"]:
             raise RuntimeError("Saily API down")
         return nordsec_rows
 
